@@ -21,7 +21,7 @@ class _BlockedDomainsScreenState extends State<BlockedDomainsScreen> {
   void _showAddDomainDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Add Blocked Domain'),
         content: TextField(
           controller: _domainController,
@@ -46,10 +46,10 @@ class _BlockedDomainsScreenState extends State<BlockedDomainsScreen> {
                 final vpnProvider = context.read<VpnProvider>();
                 await vpnProvider.addBlockedDomain(domain);
 
-                if (!mounted) return;
+                if (!mounted || !dialogContext.mounted) return;
 
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
+                Navigator.pop(dialogContext);
+                ScaffoldMessenger.of(this.context).showSnackBar(
                   SnackBar(content: Text('Added $domain to blocked list')),
                 );
                 _domainController.clear();
@@ -80,10 +80,10 @@ class _BlockedDomainsScreenState extends State<BlockedDomainsScreen> {
               final vpnProvider = context.read<VpnProvider>();
               await vpnProvider.resetToDefaultDomains();
 
-              if (!mounted) return;
+              if (!mounted || !dialogContext.mounted) return;
 
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
+              Navigator.pop(dialogContext);
+              ScaffoldMessenger.of(this.context).showSnackBar(
                 const SnackBar(content: Text('Reset to default domains')),
               );
             },
@@ -128,11 +128,11 @@ class _BlockedDomainsScreenState extends State<BlockedDomainsScreen> {
                   icon: const Icon(Icons.delete),
                   onPressed: () async {
                     await vpnProvider.removeBlockedDomain(domain);
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Removed $domain')),
-                      );
-                    }
+                    if (!context.mounted) return;
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Removed $domain')),
+                    );
                   },
                 ),
               );
