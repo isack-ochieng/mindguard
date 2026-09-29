@@ -36,7 +36,7 @@ android {
 
     dependencies {
         testImplementation("junit:junit:4.13.2")
-        implementation("com.wgtunnel:hevtunnel:1.0.4")
+        implementation("com.wgtunnel:hevtunnel:1.7.5")
     }
 
     buildTypes {
