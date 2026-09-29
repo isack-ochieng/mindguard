@@ -1,6 +1,7 @@
 package com.example.content_filter_vpn
 
 import android.content.Context
+import android.net.Network
 import java.net.InetAddress
 import java.util.concurrent.ConcurrentHashMap
 
@@ -12,6 +13,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class DnsResolver(
     context: Context,
+    private val underlyingNetwork: Network? = null,
     blockedDomains: Set<String> = emptySet()
 ) {
     companion object {
@@ -56,7 +58,7 @@ class DnsResolver(
         val normalized = decision.domain
 
         runCatching {
-            InetAddress.getAllByName(normalized).forEach { address ->
+            resolveAllOnUnderlyingNetwork(normalized).forEach { address ->
                 address.hostAddress?.let { ip ->
                     blockedIpCache[ip] = System.currentTimeMillis() + LEARNED_IP_TTL_MS
                 }
@@ -86,7 +88,8 @@ class DnsResolver(
         dnsCache[normalized]?.let { return it }
 
         return try {
-            val address = InetAddress.getByName(normalized)
+            val address = resolveAllOnUnderlyingNetwork(normalized).firstOrNull()
+                ?: return null
             val ip = address.hostAddress
             if (ip != null) {
                 dnsCache[normalized] = ip
@@ -95,6 +98,13 @@ class DnsResolver(
         } catch (_: Exception) {
             null
         }
+    }
+
+    private fun resolveAllOnUnderlyingNetwork(domain: String): Array<InetAddress> {
+        return runCatching {
+            underlyingNetwork?.getAllByName(domain)
+                ?: InetAddress.getAllByName(domain)
+        }.getOrDefault(emptyArray())
     }
 
     fun clearCache() {
