@@ -4,20 +4,138 @@ import java.nio.charset.StandardCharsets
 import java.util.Locale
 
 object TrafficInspector {
-    private const val MAX_INSPECTION_BYTES = 8192
+    private const val MAX_INSPECTION_BYTES = 32 * 1024
     private const val TLS_HANDSHAKE_CONTENT_TYPE = 22
     private const val TLS_CLIENT_HELLO = 1
     private const val TLS_SNI_EXTENSION = 0x0000
+    private const val TLS_ECH_EXTENSION = 0xFE0D
     private const val HTTP_PORT = 80
     private const val HTTPS_PORT = 443
 
+    data class TlsInspectionResult(
+        val host: String?,
+        val encryptedClientHello: Boolean,
+        val complete: Boolean
+    )
+
     fun extractHost(destinationPort: Int, payload: ByteArray): String? {
         if (payload.isEmpty()) return null
+
         return when (destinationPort) {
             HTTP_PORT -> extractHttpHost(payload)
-            HTTPS_PORT -> extractTlsSni(payload)
+            HTTPS_PORT -> inspectTlsClientHello(payload).host
             else -> null
         }?.let(::normalizeHost)
+    }
+
+    fun inspectTlsClientHello(payload: ByteArray): TlsInspectionResult {
+        val size = minOf(payload.size, MAX_INSPECTION_BYTES)
+        if (size < 5) {
+            return TlsInspectionResult(null, false, false)
+        }
+
+        if ((payload[0].toInt() and 0xFF) != TLS_HANDSHAKE_CONTENT_TYPE) {
+            return TlsInspectionResult(null, false, true)
+        }
+
+        val recordLength = readUInt16(payload, 3)
+        if (5 + recordLength > size) {
+            return TlsInspectionResult(null, false, false)
+        }
+
+        var offset = 5
+        if ((payload[offset].toInt() and 0xFF) != TLS_CLIENT_HELLO) {
+            return TlsInspectionResult(null, false, true)
+        }
+        offset++
+
+        if (offset + 3 > size) {
+            return TlsInspectionResult(null, false, false)
+        }
+
+        val handshakeLength = readUInt24(payload, offset)
+        offset += 3
+
+        val handshakeEnd = offset + handshakeLength
+        if (handshakeEnd > size) {
+            return TlsInspectionResult(null, false, false)
+        }
+
+        if (offset + 34 > handshakeEnd) {
+            return TlsInspectionResult(null, false, false)
+        }
+        offset += 34
+
+        if (offset + 1 > handshakeEnd) {
+            return TlsInspectionResult(null, false, false)
+        }
+        val sessionIdLength = payload[offset].toInt() and 0xFF
+        offset++
+        if (offset + sessionIdLength > handshakeEnd) {
+            return TlsInspectionResult(null, false, false)
+        }
+        offset += sessionIdLength
+
+        if (offset + 2 > handshakeEnd) {
+            return TlsInspectionResult(null, false, false)
+        }
+        val cipherSuitesLength = readUInt16(payload, offset)
+        offset += 2
+        if (offset + cipherSuitesLength > handshakeEnd) {
+            return TlsInspectionResult(null, false, false)
+        }
+        offset += cipherSuitesLength
+
+        if (offset + 1 > handshakeEnd) {
+            return TlsInspectionResult(null, false, false)
+        }
+        val compressionLength = payload[offset].toInt() and 0xFF
+        offset++
+        if (offset + compressionLength > handshakeEnd) {
+            return TlsInspectionResult(null, false, false)
+        }
+        offset += compressionLength
+
+        if (offset + 2 > handshakeEnd) {
+            return TlsInspectionResult(null, false, false)
+        }
+        val extensionsLength = readUInt16(payload, offset)
+        offset += 2
+
+        val extensionsEnd = offset + extensionsLength
+        if (extensionsEnd > handshakeEnd) {
+            return TlsInspectionResult(null, false, false)
+        }
+
+        var sni: String? = null
+        var encryptedClientHello = false
+
+        while (offset + 4 <= extensionsEnd) {
+            val extensionType = readUInt16(payload, offset)
+            val extensionLength = readUInt16(payload, offset + 2)
+            offset += 4
+
+            if (offset + extensionLength > extensionsEnd) {
+                return TlsInspectionResult(null, encryptedClientHello, false)
+            }
+
+            when (extensionType) {
+                TLS_SNI_EXTENSION -> {
+                    sni = parseServerNameExtension(payload, offset, extensionLength)
+                }
+                TLS_ECH_EXTENSION -> {
+                    encryptedClientHello = true
+                }
+            }
+
+            offset += extensionLength
+        }
+
+        return TlsInspectionResult(
+            host = sni?.let(::normalizeHost),
+            encryptedClientHello = encryptedClientHello,
+            complete = true
+        )
     }
 
     fun extractDnsQueryName(payload: ByteArray): String? {
@@ -30,13 +148,14 @@ object TrafficInspector {
         while (offset < payload.size) {
             val length = payload[offset].toInt() and 0xFF
             offset++
+
             if (length == 0) break
             if (length > 63 || offset + length > payload.size) return null
 
             val label = payload.copyOfRange(offset, offset + length)
                 .toString(StandardCharsets.US_ASCII)
-            if (label.isEmpty()) return null
 
+            if (label.isEmpty()) return null
             labels += label
             offset += length
         }
@@ -53,6 +172,7 @@ object TrafficInspector {
         while (lineStart < text.length) {
             val lineEnd = text.indexOf("\r\n", lineStart)
                 .let { if (it >= 0) it else text.length }
+
             val line = text.substring(lineStart, lineEnd)
             val colon = line.indexOf(':')
 
@@ -62,66 +182,6 @@ object TrafficInspector {
 
             if (lineEnd >= text.length) break
             lineStart = lineEnd + 2
-        }
-
-        return null
-    }
-
-    private fun extractTlsSni(payload: ByteArray): String? {
-        val size = minOf(payload.size, MAX_INSPECTION_BYTES)
-        if (size < 5) return null
-        if ((payload[0].toInt() and 0xFF) != TLS_HANDSHAKE_CONTENT_TYPE) return null
-
-        val recordLength = readUInt16(payload, 3)
-        if (recordLength < 4 || 5 + recordLength > size) return null
-
-        var offset = 5
-        if ((payload[offset].toInt() and 0xFF) != TLS_CLIENT_HELLO) return null
-        offset++
-
-        val handshakeLength = readUInt24(payload, offset)
-        offset += 3
-        if (handshakeLength < 34 || offset + handshakeLength > size) return null
-
-        val handshakeEnd = offset + handshakeLength
-
-        if (offset + 34 > handshakeEnd) return null
-        offset += 34
-
-        if (offset + 1 > handshakeEnd) return null
-        val sessionIdLength = payload[offset].toInt() and 0xFF
-        offset++
-        if (offset + sessionIdLength > handshakeEnd) return null
-        offset += sessionIdLength
-
-        if (offset + 2 > handshakeEnd) return null
-        val cipherSuitesLength = readUInt16(payload, offset)
-        offset += 2
-        if (offset + cipherSuitesLength > handshakeEnd) return null
-        offset += cipherSuitesLength
-
-        if (offset + 1 > handshakeEnd) return null
-        val compressionLength = payload[offset].toInt() and 0xFF
-        offset++
-        if (offset + compressionLength > handshakeEnd) return null
-        offset += compressionLength
-
-        if (offset + 2 > handshakeEnd) return null
-        val extensionsLength = readUInt16(payload, offset)
-        offset += 2
-        val extensionsEnd = minOf(offset + extensionsLength, handshakeEnd)
-
-        while (offset + 4 <= extensionsEnd) {
-            val extensionType = readUInt16(payload, offset)
-            val extensionLength = readUInt16(payload, offset + 2)
-            offset += 4
-
-            if (offset + extensionLength > extensionsEnd) return null
-            if (extensionType == TLS_SNI_EXTENSION) {
-                return parseServerNameExtension(payload, offset, extensionLength)
-            }
-
-            offset += extensionLength
         }
 
         return null
@@ -137,8 +197,8 @@ object TrafficInspector {
         var cursor = offset
         val listLength = readUInt16(payload, cursor)
         cursor += 2
-        if (listLength + 2 > length) return null
 
+        if (listLength + 2 > length) return null
         val listEnd = cursor + listLength
 
         while (cursor + 3 <= listEnd) {
@@ -147,6 +207,7 @@ object TrafficInspector {
             cursor += 3
 
             if (cursor + nameLength > listEnd) return null
+
             if (nameType == 0) {
                 return payload.copyOfRange(cursor, cursor + nameLength)
                     .toString(StandardCharsets.US_ASCII)
@@ -160,8 +221,10 @@ object TrafficInspector {
 
     private fun normalizeHost(raw: String): String? {
         var host = raw.trim().lowercase(Locale.US)
+
         if (host.startsWith("https://")) host = host.removePrefix("https://")
         if (host.startsWith("http://")) host = host.removePrefix("http://")
+
         host = host.substringBefore('/')
         host = host.substringBefore(':')
         host = host.trimEnd('.')
