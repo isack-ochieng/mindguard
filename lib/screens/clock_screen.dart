@@ -13,47 +13,186 @@ class ClockScreen extends StatefulWidget {
 }
 
 class _ClockScreenState extends State<ClockScreen> {
-  static const _unlockHourKey = 'clock_unlock_hour';
-  static const _unlockMinuteKey = 'clock_unlock_minute';
+  static const _passwordKey = 'mindguard_clock_password';
+  static const _setupCompleteKey = 'mindguard_clock_setup_complete';
 
   DateTime _now = DateTime.now();
   Timer? _timer;
-  int _unlockHour = 12;
-  int _unlockMinute = 30;
+  bool _ready = false;
+  bool _unlocking = false;
 
   @override
   void initState() {
     super.initState();
-    _loadUnlockTime();
+    _loadState();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       setState(() => _now = DateTime.now());
     });
   }
 
-  Future<void> _loadUnlockTime() async {
+  Future<void> _loadState() async {
     final prefs = await SharedPreferences.getInstance();
+    final setupComplete = prefs.getBool(_setupCompleteKey) ?? false;
+
+    if (!setupComplete && mounted) {
+      await _showFirstInstallSetup();
+    }
+
     if (!mounted) return;
-    setState(() {
-      _unlockHour = prefs.getInt(_unlockHourKey) ?? 12;
-      _unlockMinute = prefs.getInt(_unlockMinuteKey) ?? 30;
-    });
+    setState(() => _ready = true);
   }
 
-  bool get _isUnlockTime =>
-      _now.hour == _unlockHour && _now.minute == _unlockMinute;
+  Future<void> _showFirstInstallSetup() async {
+    final controller = TextEditingController();
 
-  void _attemptUnlock() {
-    if (!_isUnlockTime || !mounted) return;
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          String? error;
 
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        transitionDuration: const Duration(milliseconds: 350),
-        pageBuilder: (_, __, ___) => const HomeScreen(),
-        transitionsBuilder: (_, animation, __, child) =>
-            FadeTransition(opacity: animation, child: child),
-      ),
-    );
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                title: const Text('Set your clock password'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Choose a 4-digit password. Keep it private — you will use it to unlock MindGuard.',
+                    ),
+                    const SizedBox(height: 18),
+                    TextField(
+                      controller: controller,
+                      autofocus: true,
+                      keyboardType: TextInputType.number,
+                      obscureText: true,
+                      maxLength: 4,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 24, letterSpacing: 10),
+                      decoration: InputDecoration(
+                        counterText: '',
+                        hintText: '••••',
+                        errorText: error,
+                        border: const OutlineInputBorder(),
+                      ),
+                      onChanged: (_) {
+                        if (error != null) setDialogState(() => error = null);
+                      },
+                    ),
+                  ],
+                ),
+                actions: [
+                  FilledButton(
+                    onPressed: () async {
+                      final password = controller.text.trim();
+
+                      if (!RegExp(r'^\d{4}$').hasMatch(password)) {
+                        setDialogState(() => error = 'Enter exactly 4 digits.');
+                        return;
+                      }
+
+                      final hour = int.parse(password.substring(0, 2));
+                      final minute = int.parse(password.substring(2, 4));
+
+                      if (hour > 23 || minute > 59) {
+                        setDialogState(() => error = 'Use a valid 24-hour time, e.g. 0830.');
+                        return;
+                      }
+
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setString(_passwordKey, password);
+                      await prefs.setBool(_setupCompleteKey, true);
+
+                      if (context.mounted) Navigator.of(context).pop();
+                    },
+                    child: const Text('Continue'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      controller.dispose();
+    }
+  }
+
+  Future<void> _attemptUnlock() async {
+    if (!_ready || _unlocking || !mounted) return;
+
+    final controller = TextEditingController();
+
+    try {
+      final password = await showDialog<String>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('Unlock'),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              maxLength: 4,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 24, letterSpacing: 10),
+              decoration: const InputDecoration(
+                counterText: '',
+                hintText: '••••',
+                border: OutlineInputBorder(),
+              ),
+              onSubmitted: (_) => Navigator.of(context).pop(controller.text),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(controller.text),
+                child: const Text('Unlock'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (password == null || !mounted) return;
+
+      final prefs = await SharedPreferences.getInstance();
+      final storedPassword = prefs.getString(_passwordKey);
+
+      if (storedPassword == null || password != storedPassword) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Incorrect password.'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+
+      setState(() => _unlocking = true);
+
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          transitionDuration: const Duration(milliseconds: 350),
+          pageBuilder: (_, __, ___) => const HomeScreen(),
+          transitionsBuilder: (_, animation, __, child) =>
+              FadeTransition(opacity: animation, child: child),
+        ),
+      );
+    } finally {
+      controller.dispose();
+      if (mounted) setState(() => _unlocking = false);
+    }
   }
 
   @override
