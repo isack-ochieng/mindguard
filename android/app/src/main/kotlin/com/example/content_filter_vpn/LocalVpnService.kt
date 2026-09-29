@@ -36,7 +36,7 @@ class LocalVpnService : VpnService() {
     
     override fun onCreate() {
         super.onCreate()
-        dnsResolver = DnsResolver(emptySet())
+        dnsResolver = DnsResolver(this, emptySet())
         packetAnalyzer = PacketAnalyzer(dnsResolver)
     }
     
@@ -156,9 +156,8 @@ class LocalVpnService : VpnService() {
             blockedDomains[domain] = true
         }
         
-        // Update DNS resolver with new domains
-        dnsResolver = DnsResolver(blockedDomains.keys)
-        packetAnalyzer = PacketAnalyzer(dnsResolver)
+        // Update the local decision engine without rebuilding the VPN pipeline.
+        dnsResolver.updateBlockedDomains(blockedDomains.keys)
     }
     
     private fun createNotificationChannel() {
