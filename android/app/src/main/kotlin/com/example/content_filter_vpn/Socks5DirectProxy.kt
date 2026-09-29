@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class Socks5DirectProxy(
     private val vpnService: VpnService,
     private val dnsResolver: DnsResolver,
+    private val underlyingNetwork: Network?,
     private val onBlocked: (String) -> Unit
 ) {
     companion object {
@@ -541,11 +542,7 @@ class Socks5DirectProxy(
         }
     }
 
-    private fun getUnderlyingNetwork(): Network? {
-        val connectivityManager =
-            vpnService.getSystemService(ConnectivityManager::class.java)
-        return connectivityManager?.activeNetwork
-    }
+    private fun getUnderlyingNetwork(): Network? = underlyingNetwork
 
     private fun isIpBlocked(host: String): Boolean {
         return runCatching {
