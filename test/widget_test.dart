@@ -10,7 +10,9 @@ void main() {
       'mindguard_clock_setup_complete': true,
     });
 
-    await tester.pumpWidget(const ClockScreen());
+    await tester.pumpWidget(
+      const MaterialApp(home: ClockScreen()),
+    );
     await tester.pump();
 
     expect(find.byType(ClockScreen), findsOneWidget);
