@@ -48,9 +48,7 @@ class _ClockScreenState extends State<ClockScreen> {
       if (!mounted) return;
       setState(() {
         _setupMode = true;
-        _editing = true;
-        _editHour = (_now.hour % 12) + _now.minute / 60.0;
-        _editMinute = _now.minute.toDouble();
+        _editing = false;
       });
     }
 
@@ -93,11 +91,15 @@ class _ClockScreenState extends State<ClockScreen> {
     );
   }
 
-  void _beginEditing() {
+  void _beginEditing(Offset localPosition, Size size) {
     if (!_ready || _editing || _unlocking) return;
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final distance = (localPosition - center).distance;
+    if (distance > size.width * 0.15) return;
+
     setState(() {
       _editing = true;
-      _setupMode = false;
       _editHour = (_now.hour % 12) + _now.minute / 60.0;
       _editMinute = _now.minute.toDouble();
     });
@@ -208,7 +210,20 @@ class _ClockScreenState extends State<ClockScreen> {
                   Builder(
                     builder: (clockContext) => GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      onLongPress: _beginEditing,
+                      onLongPressStart: (details) {
+                        _beginEditing(
+                          details.localPosition,
+                          Size(diameter, diameter),
+                        );
+                      },
+                      onTapUp: (details) {
+                        if (!_editing) return;
+                        final center = Offset(diameter / 2, diameter / 2);
+                        if ((details.localPosition - center).distance <=
+                            diameter * 0.15) {
+                          _confirmHands();
+                        }
+                      },
                       onPanUpdate: (details) {
                         if (!_editing) return;
                         final box = clockContext.findRenderObject() as RenderBox?;
@@ -228,10 +243,6 @@ class _ClockScreenState extends State<ClockScreen> {
                             editing: _editing,
                             hourHand: _editHour,
                             minuteHand: _editMinute,
-                          ),
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: _editing ? _confirmHands : null,
                           ),
                         ),
                       ),
