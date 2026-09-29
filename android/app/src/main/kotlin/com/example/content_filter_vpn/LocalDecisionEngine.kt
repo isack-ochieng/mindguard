@@ -30,8 +30,8 @@ data class DomainDecision(
  * Fast, local domain decision engine.
  *
  * Order is intentional:
- *   1. Explicit local allowlist
- *   2. Explicit local blocklist
+ *   1. Explicit local blocklist
+ *   2. Explicit local allowlist
  *   3. Cached previous decisions
  *   4. Local reputation
  *   5. UNKNOWN (future AI/network intelligence layer)
@@ -89,15 +89,9 @@ class LocalDecisionEngine(
             return DomainDecision("", DecisionAction.UNKNOWN, DecisionSource.NONE)
         }
 
-        // Policy lists always outrank cached decisions.
-        if (matchesDomain(domain, allowedDomains)) {
-            return DomainDecision(
-                domain = domain,
-                action = DecisionAction.ALLOW,
-                source = DecisionSource.ALLOWLIST
-            )
-        }
-
+        // Explicit block policy must win over allow policy.
+        // This prevents a broad allowlist entry from masking a more specific
+        // blocked domain/subdomain.
         val blockedCategory = matchingCategory(domain, blockedDomains)
         if (blockedCategory != null) {
             return DomainDecision(
@@ -105,6 +99,14 @@ class LocalDecisionEngine(
                 action = DecisionAction.BLOCK,
                 source = DecisionSource.BLOCKLIST,
                 category = blockedCategory
+            )
+        }
+
+        if (matchesDomain(domain, allowedDomains)) {
+            return DomainDecision(
+                domain = domain,
+                action = DecisionAction.ALLOW,
+                source = DecisionSource.ALLOWLIST
             )
         }
 
