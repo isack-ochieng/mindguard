@@ -12,7 +12,8 @@
     <application
         android:label="Clock"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@drawable/ic_clock"
+        android:roundIcon="@drawable/ic_clock">
         
         <!-- Main Activity -->
         <activity
