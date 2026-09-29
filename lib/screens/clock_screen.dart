@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/clock_painter.dart';
 import 'home_screen.dart';
@@ -15,6 +16,8 @@ class ClockScreen extends StatefulWidget {
 class _ClockScreenState extends State<ClockScreen> {
   static const _passwordKey = 'mindguard_clock_password';
   static const _setupCompleteKey = 'mindguard_clock_setup_complete';
+  static const _securePasswordKey = 'mindguard_clock_password';
+  static const _secureStorage = FlutterSecureStorage();
 
   DateTime _now = DateTime.now();
   Timer? _timer;
@@ -104,7 +107,7 @@ class _ClockScreenState extends State<ClockScreen> {
                       }
 
                       final prefs = await SharedPreferences.getInstance();
-                      await prefs.setString(_passwordKey, password);
+                      await _secureStorage.write(key: _securePasswordKey, value: password);
                       await prefs.setBool(_setupCompleteKey, true);
 
                       if (context.mounted) Navigator.of(context).pop();
@@ -165,7 +168,7 @@ class _ClockScreenState extends State<ClockScreen> {
       if (password == null || !mounted) return;
 
       final prefs = await SharedPreferences.getInstance();
-      final storedPassword = prefs.getString(_passwordKey);
+      final storedPassword = await _secureStorage.read(key: _securePasswordKey);
 
       if (storedPassword == null || password != storedPassword) {
         if (mounted) {
