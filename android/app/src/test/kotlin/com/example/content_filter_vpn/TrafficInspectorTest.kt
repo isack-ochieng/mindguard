@@ -31,6 +31,31 @@ class TrafficInspectorTest {
     }
 
     @Test
+    fun reportsIncompleteFragmentedClientHello() {
+        val clientHello = tlsClientHello("blocked.example")
+        val firstPart = clientHello.copyOfRange(0, clientHello.size / 2)
+
+        val inspection = TrafficInspector.inspectTlsClientHello(firstPart)
+
+        assertNull(inspection.host)
+        assertEquals(false, inspection.complete)
+    }
+
+    @Test
+    fun detectsEncryptedClientHelloExtension() {
+        val clientHello = tlsClientHello(
+            serverName = "public.example",
+            includeEch = true
+        )
+
+        val inspection = TrafficInspector.inspectTlsClientHello(clientHello)
+
+        assertEquals("public.example", inspection.host)
+        assertEquals(true, inspection.encryptedClientHello)
+        assertEquals(true, inspection.complete)
+    }
+
+    @Test
     fun extractsDnsQuestionName() {
         val query = byteArrayOf(
             0x12, 0x34, // ID
@@ -78,7 +103,10 @@ class TrafficInspectorTest {
         assertNull(TrafficInspector.extractDnsQueryName(malformed))
     }
 
-    private fun tlsClientHello(serverName: String): ByteArray {
+    private fun tlsClientHello(
+        serverName: String,
+        includeEch: Boolean = false
+    ): ByteArray {
         val host = serverName.toByteArray(Charsets.US_ASCII)
 
         val sniList = byteArrayOf(
@@ -93,10 +121,25 @@ class TrafficInspectorTest {
             *sniList
         )
 
+        val echExtension = if (includeEch) {
+            byteArrayOf(
+                0xFE.toByte(), 0x0D.toByte(),
+                0x00, 0x01,
+                0x00
+            )
+        } else {
+            byteArrayOf()
+        }
+
+        val allExtensions = byteArrayOf(
+            *sniExtension,
+            *echExtension
+        )
+
         val extensions = byteArrayOf(
-            (sniExtension.size ushr 8).toByte(),
-            (sniExtension.size and 0xFF).toByte(),
-            *sniExtension
+            (allExtensions.size ushr 8).toByte(),
+            (allExtensions.size and 0xFF).toByte(),
+            *allExtensions
         )
 
         val cipherSuites = byteArrayOf(
