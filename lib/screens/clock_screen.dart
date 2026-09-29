@@ -159,6 +159,7 @@ class _ClockScreenState extends State<ClockScreen> {
 
     final storedPassword = await _secureStorage.read(key: _securePasswordKey);
     if (storedPassword == null) return;
+    if (!mounted) return;
 
     if (password != storedPassword) {
       setState(() => _editing = false);
@@ -263,7 +264,7 @@ class _ClockScreenState extends State<ClockScreen> {
                   Text(
                     _formatDate(_now),
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.48),
+                      color: Colors.white.withValues(alpha: 0.48),
                       fontSize: 14,
                       letterSpacing: 1.0,
                     ),
@@ -275,7 +276,7 @@ class _ClockScreenState extends State<ClockScreen> {
                           ? 'Set your secret time'
                           : 'Set the hands to your secret time',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.65),
+                        color: Colors.white.withValues(alpha: 0.65),
                         fontSize: 13,
                         letterSpacing: 0.7,
                       ),
@@ -300,7 +301,7 @@ class _ClockScreenState extends State<ClockScreen> {
     final hour = time.hour.toString().padLeft(2, '0');
     final minute = time.minute.toString().padLeft(2, '0');
     final second = time.second.toString().padLeft(2, '0');
-    return hour + ':' + minute + ':' + second;
+    return '$hour:$minute:$second';
   }
 
   String _formatDate(DateTime time) {
@@ -308,8 +309,7 @@ class _ClockScreenState extends State<ClockScreen> {
       'January', 'February', 'March', 'April', 'May', 'June',
       'July', 'August', 'September', 'October', 'November', 'December',
     ];
-    return months[time.month - 1] + ' ' +
-        time.day.toString() + ', ' + time.year.toString();
+    return '${months[time.month - 1]} ${time.day}, ${time.year}';
   }
 }
 
@@ -408,7 +408,7 @@ class _PolishedClockPainter extends CustomPainter {
         center,
         radius * 0.085,
         Paint()
-          ..color = const Color(0xFF111111).withOpacity(0.12)
+          ..color = const Color(0xFF111111).withValues(alpha: 0.12)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2,
       );
