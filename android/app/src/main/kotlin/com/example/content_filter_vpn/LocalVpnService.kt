@@ -7,175 +7,198 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.net.VpnService
 import android.os.Build
+import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import androidx.core.app.NotificationCompat
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.nio.ByteBuffer
-import java.util.concurrent.ConcurrentHashMap
+import com.wgtunnel.hevtunnel.HevTunnelConfig
+import com.wgtunnel.hevtunnel.TProxyService
+import java.io.File
 
 class LocalVpnService : VpnService() {
-    
     private var vpnInterface: ParcelFileDescriptor? = null
     private var isRunning = false
-    private val blockedDomains = ConcurrentHashMap<String, Boolean>()
-    private var vpnThread: Thread? = null
     private lateinit var dnsResolver: DnsResolver
-    private lateinit var packetAnalyzer: PacketAnalyzer
-    
+    private var directProxy: Socks5DirectProxy? = null
+    private var tunnelThread: Thread? = null
+    private var hevConfigFile: File? = null
+
     companion object {
         const val ACTION_START = "com.example.content_filter_vpn.START"
         const val ACTION_STOP = "com.example.content_filter_vpn.STOP"
         const val ACTION_UPDATE_DOMAINS = "com.example.content_filter_vpn.UPDATE_DOMAINS"
         const val EXTRA_DOMAINS = "domains"
+
         private const val NOTIFICATION_ID = 1
-        private const val CHANNEL_ID = "vpn_service_channel"
+        private const val CHANNEL_ID = "clock_protection"
         private const val VPN_MTU = 1500
-        private const val VPN_ADDRESS = "10.0.0.2"
+        private const val VPN_ADDRESS_V4 = "10.0.0.2"
+        private const val VPN_ADDRESS_V6 = "fd00::2"
     }
-    
+
     override fun onCreate() {
         super.onCreate()
         dnsResolver = DnsResolver(this, emptySet())
-        packetAnalyzer = PacketAnalyzer(dnsResolver)
     }
-    
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_START -> {
-                startVpnService()
-            }
-            ACTION_STOP -> {
-                stopVpnService()
-            }
+            ACTION_START -> startVpnService()
+            ACTION_STOP -> stopVpnService()
             ACTION_UPDATE_DOMAINS -> {
                 val domains = intent.getStringArrayListExtra(EXTRA_DOMAINS)
                 updateBlockedDomains(domains ?: emptyList())
             }
         }
+
         return START_STICKY
     }
-    
+
+    @Synchronized
     private fun startVpnService() {
         if (isRunning) return
-        
+
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
-        
+
         try {
-            vpnInterface = Builder()
-                .addAddress(VPN_ADDRESS, 24)
+            val builder = Builder()
+                .addAddress(VPN_ADDRESS_V4, 24)
+                .addAddress(VPN_ADDRESS_V6, 120)
                 .addRoute("0.0.0.0", 0)
+                .addRoute("::", 0)
                 .addDnsServer("8.8.8.8")
                 .addDnsServer("8.8.4.4")
-                .setSession("ContentFilterVPN")
+                .setSession("Clock")
                 .setMtu(VPN_MTU)
                 .setBlocking(false)
-                .establish()
-            
+
+            // MindGuard's own outbound connections must not enter its VPN.
+            // The proxy also calls protect() on each upstream socket.
+            builder.addDisallowedApplication(packageName)
+
+            val establishedInterface = builder.establish()
+                ?: throw IllegalStateException("VPN interface could not be established")
+
+            vpnInterface = establishedInterface
+
+            directProxy = Socks5DirectProxy(
+                vpnService = this,
+                dnsResolver = dnsResolver,
+                onBlocked = ::sendBlockedSite
+            )
+
+            val proxyPort = directProxy?.start()
+                ?: throw IllegalStateException("Local SOCKS5 proxy could not start")
+
+            hevConfigFile = TProxyService.createHevTunnelConfig(
+                config = HevTunnelConfig(
+                    mtu = VPN_MTU,
+                    ipv4 = VPN_ADDRESS_V4,
+                    ipv6 = VPN_ADDRESS_V6,
+                    address = "127.0.0.1",
+                    port = proxyPort,
+                    username = "",
+                    password = ""
+                ),
+                cacheDirPath = cacheDir
+            )
+
             isRunning = true
-            
-            vpnThread = Thread {
-                runVpnLoop()
+
+            val fd = vpnInterface?.fileDescriptor
+                ?: throw IllegalStateException("VPN file descriptor unavailable")
+
+            tunnelThread = Thread {
+                try {
+                    val started = TProxyService.TProxyStartService(
+                        hevConfigFile?.absolutePath,
+                        fd.detachFd()
+                    )
+
+                    if (!started) {
+                        throw IllegalStateException("tun2socks engine failed to start")
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    if (isRunning) {
+                        isRunning = false
+                        sendConnectionState(false)
+                    }
+                }
+            }.apply {
+                name = "MindGuard-Tun2Socks"
+                start()
             }
-            vpnThread?.start()
-            
+
             sendConnectionState(true)
         } catch (e: Exception) {
             e.printStackTrace()
             stopVpnService()
         }
     }
-    
-    private fun runVpnLoop() {
-        val vpnInput = FileInputStream(vpnInterface?.fileDescriptor)
-        val vpnOutput = FileOutputStream(vpnInterface?.fileDescriptor)
-        val buffer = ByteBuffer.allocate(VPN_MTU)
-        
+
+    @Synchronized
+    private fun stopVpnService() {
+        if (!isRunning && vpnInterface == null && directProxy == null) {
+            return
+        }
+
+        isRunning = false
+
         try {
-            while (isRunning) {
-                val length = vpnInput.read(buffer.array())
-                if (length > 0) {
-                    buffer.limit(length)
-                    buffer.position(0)
-                    
-                    // Analyze packet
-                    val packetInfo = packetAnalyzer.analyzePacket(buffer)
-                    
-                    if (packetInfo != null && packetInfo.shouldBlock) {
-                        // Block this packet
-                        val blockedUrl = packetInfo.domain ?: packetInfo.destIp
-                        sendBlockedSite(blockedUrl)
-                        
-                        // Optionally send a RST packet or drop silently
-                        // For now, we just drop the packet
-                    } else {
-                        // Forward packet (in a real implementation, you'd forward to actual network)
-                        // This is a simplified version - real VPN would need proper routing
-                        buffer.position(0)
-                        vpnOutput.write(buffer.array(), 0, length)
-                    }
-                    
-                    buffer.clear()
-                }
-                
-                // Small sleep to prevent CPU overuse
-                Thread.sleep(1)
-            }
+            TProxyService.TProxyStopService()
         } catch (e: Exception) {
             e.printStackTrace()
-        } finally {
-            try {
-                vpnInput.close()
-                vpnOutput.close()
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
         }
-    }
-    
-    private fun stopVpnService() {
-        isRunning = false
-        vpnThread?.interrupt()
-        
+
+        try {
+            directProxy?.stop()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        directProxy = null
+
+        try {
+            tunnelThread?.interrupt()
+        } catch (_: Exception) {
+        }
+        tunnelThread = null
+
         try {
             vpnInterface?.close()
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        
         vpnInterface = null
+
+        hevConfigFile?.delete()
+        hevConfigFile = null
+
         sendConnectionState(false)
         stopForeground(true)
         stopSelf()
     }
-    
+
     private fun updateBlockedDomains(domains: List<String>) {
-        blockedDomains.clear()
-        domains.forEach { domain ->
-            blockedDomains[domain] = true
-        }
-        
-        // Update the local decision engine without rebuilding the VPN pipeline.
-        dnsResolver.updateBlockedDomains(blockedDomains.keys)
+        dnsResolver.updateBlockedDomains(domains)
     }
-    
+
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Content Filter VPN",
+                "Clock protection",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "VPN service for content filtering"
+                description = "Background network protection"
                 setShowBadge(false)
             }
-            
-            val notificationManager = getSystemService(NotificationManager::class.java)
-            notificationManager.createNotificationChannel(channel)
+
+            getSystemService(NotificationManager::class.java)
+                .createNotificationChannel(channel)
         }
     }
-    
+
     private fun createNotification(): Notification {
         val intent = packageManager.getLaunchIntentForPackage(packageName)
         val pendingIntent = PendingIntent.getActivity(
@@ -184,31 +207,40 @@ class LocalVpnService : VpnService() {
             intent,
             PendingIntent.FLAG_IMMUTABLE
         )
-        
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Content Filter VPN")
-            .setContentText("VPN is active and filtering content")
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("Clock")
+            .setContentText("Protection active")
+            .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
-    
+
     private fun sendConnectionState(connected: Boolean) {
         val intent = Intent("com.example.content_filter_vpn.CONNECTION_STATE")
         intent.putExtra("connected", connected)
         sendBroadcast(intent)
     }
-    
+
     private fun sendBlockedSite(url: String) {
         val intent = Intent("com.example.content_filter_vpn.SITE_BLOCKED")
         intent.putExtra("url", url)
         sendBroadcast(intent)
     }
-    
+
+    override fun onRevoke() {
+        stopVpnService()
+        super.onRevoke()
+    }
+
     override fun onDestroy() {
         stopVpnService()
         super.onDestroy()
+    }
+
+    override fun onBind(intent: Intent?): IBinder? {
+        return super.onBind(intent)
     }
 }
