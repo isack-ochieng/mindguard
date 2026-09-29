@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class DnsResolver(
     context: Context,
-    private val underlyingNetwork: Network? = null,
+    private var underlyingNetwork: Network? = null,
     blockedDomains: Set<String> = emptySet()
 ) {
     companion object {
@@ -31,6 +31,10 @@ class DnsResolver(
 
     init {
         updateBlockedDomains(blockedDomains)
+    }
+
+    fun updateUnderlyingNetwork(network: Network?) {
+        underlyingNetwork = network
     }
 
     fun updateBlockedDomains(domains: Collection<String>) {
