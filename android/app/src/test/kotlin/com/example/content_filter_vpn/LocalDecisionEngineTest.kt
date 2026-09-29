@@ -132,6 +132,18 @@ class LocalDecisionEngineTest {
     }
 
     @Test
+    fun explicitBlockOutranksAllowlist() {
+        val engine = LocalDecisionEngine()
+        engine.replaceUserBlockedDomains(listOf("google.com"))
+
+        val decision = engine.decide("mail.google.com")
+
+        assertEquals(DecisionAction.BLOCK, decision.action)
+        assertEquals(DecisionSource.BLOCKLIST, decision.source)
+        assertEquals("custom", decision.category)
+    }
+
+    @Test
     fun policyListOutranksConflictingCachedAllow() {
         val engine = LocalDecisionEngine()
 
