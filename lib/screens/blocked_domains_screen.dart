@@ -83,7 +83,7 @@ class _BlockedDomainsScreenState extends State<BlockedDomainsScreen> {
               if (!mounted || !dialogContext.mounted) return;
 
               Navigator.pop(dialogContext);
-              ScaffoldMessenger.of(this.context).showSnackBar(
+              ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Reset to default domains')),
               );
             },
