@@ -40,6 +40,10 @@ class Socks5DirectProxy(
         private const val CONNECT_TIMEOUT_MS = 6_000
         private const val INITIAL_READ_TIMEOUT_MS = 1_200
         private const val HANDSHAKE_TIMEOUT_MS = 5_000
+        private const val WEB_INSPECTION_TIMEOUT_MS = 1_500
+        private const val MAX_INITIAL_PAYLOAD_BYTES = 32 * 1024
+        private const val BLOCK_UNCLASSIFIED_ECH = true
+        private const val BLOCK_UNIDENTIFIED_WEB_IP = true
     }
 
     private val executor: ExecutorService = Executors.newCachedThreadPool()
@@ -193,12 +197,23 @@ class Socks5DirectProxy(
         }
 
         val initialPayload = if (request.port == 80 || request.port == 443) {
-            readInitialPayload(input)
+            readInitialPayload(input, request.port)
         } else {
             ByteArray(0)
         }
 
-        val discoveredHost = TrafficInspector.extractHost(request.port, initialPayload)
+        val tlsInspection = if (request.port == 443) {
+            TrafficInspector.inspectTlsClientHello(initialPayload)
+        } else {
+            null
+        }
+
+        val discoveredHost = when (request.port) {
+            80 -> TrafficInspector.extractHost(80, initialPayload)
+            443 -> tlsInspection?.host
+            else -> null
+        }
+
         if (discoveredHost != null) {
             val decision = dnsResolver.decideDomain(discoveredHost)
             if (decision.action == DecisionAction.BLOCK) {
@@ -209,9 +224,32 @@ class Socks5DirectProxy(
 
         client.soTimeout = 0
         val targetAddress = resolveTarget(request.host) ?: return
+        val targetIp = targetAddress.hostAddress ?: request.host
 
-        if (isIpBlocked(targetAddress.hostAddress ?: request.host)) {
+        if (isIpBlocked(targetIp)) {
             onBlocked(discoveredHost ?: request.host)
+            return
+        }
+
+        if (
+            BLOCK_UNIDENTIFIED_WEB_IP &&
+            request.addressType != ATYP_DOMAIN &&
+            (request.port == 80 || request.port == 443) &&
+            discoveredHost == null
+        ) {
+            onBlocked(request.host)
+            return
+        }
+
+        if (
+            request.port == 443 &&
+            tlsInspection?.complete == true &&
+            tlsInspection.encryptedClientHello &&
+            discoveredHost == null &&
+            BLOCK_UNCLASSIFIED_ECH &&
+            !dnsResolver.isIpBlocked(targetIp)
+        ) {
+            onBlocked(request.host)
             return
         }
 
@@ -301,6 +339,15 @@ class Socks5DirectProxy(
                         sourceKey == endpointKey(currentClient.address, currentClient.port)
                     ) {
                         val request = parseUdpRequest(packet) ?: continue
+
+                        // QUIC/HTTP3 is carried over UDP/443 and does not expose
+                        // an inspectable HTTP Host or TLS SNI through this path.
+                        // Reject it so browsers/apps fall back to TCP/TLS.
+                        if (request.destinationPort == 443) {
+                            onBlocked(request.domainForEvent ?: request.host)
+                            continue
+                        }
+
                         val destination = resolveTarget(request.host) ?: continue
 
                         if (dnsResolver.isIpBlocked(destination.hostAddress ?: request.host)) {
@@ -310,20 +357,27 @@ class Socks5DirectProxy(
 
                         if (request.destinationPort == 53) {
                             val dnsName = TrafficInspector.extractDnsQueryName(request.payload)
-                            if (
-                                dnsName != null &&
-                                dnsResolver.decideDomain(dnsName).action == DecisionAction.BLOCK
-                            ) {
-                                onBlocked(dnsName)
-                                continue
+                            if (dnsName != null) {
+                                dnsResolver.observeDomain(dnsName)
+
+                                if (dnsResolver.decideDomain(dnsName).action == DecisionAction.BLOCK) {
+                                    onBlocked(dnsName)
+                                    continue
+                                }
                             }
                         } else if (
                             request.hostIsDomain &&
-                            request.domainForEvent != null &&
-                            dnsResolver.decideDomain(request.domainForEvent).action == DecisionAction.BLOCK
+                            request.domainForEvent != null
                         ) {
-                            onBlocked(request.domainForEvent)
-                            continue
+                            dnsResolver.observeDomain(request.domainForEvent)
+
+                            if (
+                                dnsResolver.decideDomain(request.domainForEvent).action ==
+                                DecisionAction.BLOCK
+                            ) {
+                                onBlocked(request.domainForEvent)
+                                continue
+                            }
                         }
 
                         clientEndpoint[0] = InetSocketAddress(packet.address, packet.port)
@@ -501,16 +555,48 @@ class Socks5DirectProxy(
         }.getOrDefault(false)
     }
 
-    private fun readInitialPayload(input: InputStream): ByteArray {
-        val buffer = ByteArray(8192)
-        val firstRead = try {
-            input.read(buffer)
-        } catch (_: java.net.SocketTimeoutException) {
-            return ByteArray(0)
+    private fun readInitialPayload(
+        input: InputStream,
+        destinationPort: Int
+    ): ByteArray {
+        val inspectUntil = System.currentTimeMillis() + WEB_INSPECTION_TIMEOUT_MS
+        val output = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(8 * 1024)
+
+        input.soTimeout = INITIAL_READ_TIMEOUT_MS
+
+        while (
+            output.size() < MAX_INITIAL_PAYLOAD_BYTES &&
+            System.currentTimeMillis() < inspectUntil
+        ) {
+            val remainingTime =
+                (inspectUntil - System.currentTimeMillis()).coerceAtLeast(1L)
+
+            input.soTimeout = minOf(
+                INITIAL_READ_TIMEOUT_MS,
+                remainingTime.toInt().coerceAtLeast(1)
+            )
+
+            val read = try {
+                input.read(buffer)
+            } catch (_: java.net.SocketTimeoutException) {
+                break
+            }
+
+            if (read <= 0) break
+            output.write(buffer, 0, read)
+
+            val payload = output.toByteArray()
+
+            if (destinationPort == 80) {
+                if (TrafficInspector.extractHost(80, payload) != null) break
+            } else if (destinationPort == 443) {
+                val inspection = TrafficInspector.inspectTlsClientHello(payload)
+                if (inspection.complete) break
+            }
         }
 
-        if (firstRead <= 0) return ByteArray(0)
-        return buffer.copyOf(firstRead)
+        return output.toByteArray()
     }
 
     private fun copyStream(input: InputStream, output: OutputStream) {
