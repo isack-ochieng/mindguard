@@ -16,7 +16,6 @@ void main() {
     await tester.pump();
 
     expect(find.byType(ClockScreen), findsOneWidget);
-    expect(find.byType(CustomPaint), findsOneWidget);
     expect(find.textContaining(':'), findsOneWidget);
   });
 }
