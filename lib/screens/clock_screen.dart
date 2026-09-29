@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/clock_painter.dart';
@@ -12,24 +13,47 @@ class ClockScreen extends StatefulWidget {
 }
 
 class _ClockScreenState extends State<ClockScreen> {
-  DateTime _dateTime = DateTime.now();
+  static const _unlockHourKey = 'clock_unlock_hour';
+  static const _unlockMinuteKey = 'clock_unlock_minute';
+
+  DateTime _now = DateTime.now();
   Timer? _timer;
-  String _password = '1230'; // Default password: 12:30
+  int _unlockHour = 12;
+  int _unlockMinute = 30;
 
   @override
   void initState() {
     super.initState();
-    _loadPassword();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        _dateTime = DateTime.now();
-      });
+    _loadUnlockTime();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() => _now = DateTime.now());
     });
   }
 
-  Future<void> _loadPassword() async {
+  Future<void> _loadUnlockTime() async {
     final prefs = await SharedPreferences.getInstance();
-    _password = prefs.getString('clock_password') ?? '1230';
+    if (!mounted) return;
+    setState(() {
+      _unlockHour = prefs.getInt(_unlockHourKey) ?? 12;
+      _unlockMinute = prefs.getInt(_unlockMinuteKey) ?? 30;
+    });
+  }
+
+  bool get _isUnlockTime =>
+      _now.hour == _unlockHour && _now.minute == _unlockMinute;
+
+  void _attemptUnlock() {
+    if (!_isUnlockTime || !mounted) return;
+
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 350),
+        pageBuilder: (_, __, ___) => const HomeScreen(),
+        transitionsBuilder: (_, animation, __, child) =>
+            FadeTransition(opacity: animation, child: child),
+      ),
+    );
   }
 
   @override
@@ -38,162 +62,98 @@ class _ClockScreenState extends State<ClockScreen> {
     super.dispose();
   }
 
-  void _checkPassword(int hour, int minute) {
-    final enteredPassword = '${hour.toString().padLeft(2, '0')}${minute.toString().padLeft(2, '0')}';
-    
-    if (enteredPassword == _password) {
-      // Password correct, navigate to the real app
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
-      );
-    } else {
-      // Password incorrect, show a subtle hint or do nothing
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Time is not correct'),
-          duration: Duration(seconds: 1),
-        ),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Analog Clock
-            GestureDetector(
-              onLongPress: () {
-                // Show a dialog to set the password (for first time setup)
-                _showPasswordSetupDialog();
-              },
-              onDoubleTap: () {
-                // Check password based on current time
-                _checkPassword(_dateTime.hour, _dateTime.minute);
-              },
-              child: Container(
-                width: 300,
-                height: 300,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.5),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: CustomPaint(
-                  painter: ClockPainter(
-                    _dateTime,
-                    handColor: Colors.black,
-                    tickColor: Colors.grey.shade400,
-                    centerColor: Colors.red,
+      backgroundColor: const Color(0xFF0B0B0B),
+      body: SafeArea(
+        child: Center(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final diameter = math.min(
+                constraints.maxWidth * 0.82,
+                constraints.maxHeight * 0.68,
+              );
+
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _attemptUnlock,
+                child: SizedBox(
+                  width: diameter,
+                  height: diameter + 120,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Semantics(
+                        label: 'Analog clock',
+                        child: Container(
+                          width: diameter,
+                          height: diameter,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: const Color(0xFFF7F7F2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.45),
+                                blurRadius: 28,
+                                spreadRadius: 2,
+                                offset: const Offset(0, 12),
+                              ),
+                            ],
+                          ),
+                          child: CustomPaint(
+                            painter: ClockPainter(
+                              _now,
+                              handColor: const Color(0xFF151515),
+                              tickColor: const Color(0xFF8A8A8A),
+                              centerColor: const Color(0xFF151515),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+                      Text(
+                        _formatTime(_now),
+                        style: const TextStyle(
+                          color: Color(0xFFF4F4F4),
+                          fontSize: 30,
+                          fontWeight: FontWeight.w300,
+                          letterSpacing: 2.2,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      Text(
+                        _formatDate(_now),
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.55),
+                          fontSize: 14,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ),
-            
-            const SizedBox(height: 40),
-            
-            // Digital Clock
-            Text(
-              '${_dateTime.hour.toString().padLeft(2, '0')}:${_dateTime.minute.toString().padLeft(2, '0')}:${_dateTime.second.toString().padLeft(2, '0')}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 48,
-                fontWeight: FontWeight.w300,
-                fontFeatures: [FontFeature.tabularFigures()],
-              ),
-            ),
-            
-            const SizedBox(height: 10),
-            
-            // Date
-            Text(
-              '${_dateTime.month.toString().padLeft(2, '0')}/${_dateTime.day.toString().padLeft(2, '0')}/${_dateTime.year}',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.7),
-                fontSize: 20,
-              ),
-            ),
-            
-            const SizedBox(height: 40),
-            
-            // Subtle hint for the user
-            Text(
-              'Double-tap to unlock',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.4),
-                fontSize: 14,
-              ),
-            ),
-          ],
+              );
+            },
+          ),
         ),
       ),
     );
   }
 
-  void _showPasswordSetupDialog() {
-    // This dialog is for the initial setup of the password
-    // In a real app, this would be a more complex setup flow
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Set Unlock Time (Password)'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Current Password: ${_password.substring(0, 2)}:${_password.substring(2, 4)}'),
-            const SizedBox(height: 10),
-            const Text('The password is the hour and minute (HHMM) you double-tap the clock.'),
-            const SizedBox(height: 10),
-            const Text('To change, enter a new HHMM below:'),
-            TextField(
-              keyboardType: TextInputType.number,
-              maxLength: 4,
-              onChanged: (value) {
-                if (value.length == 4) {
-                  final hour = int.tryParse(value.substring(0, 2)) ?? -1;
-                  final minute = int.tryParse(value.substring(2, 4)) ?? -1;
-                  if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
-                    _password = value;
-                  }
-                }
-              },
-              decoration: const InputDecoration(
-                hintText: 'e.g., 1230 for 12:30',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.setString('clock_password', _password);
-              if (mounted) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Password set to ${_password.substring(0, 2)}:${_password.substring(2, 4)}')),
-                );
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
+  String _formatTime(DateTime time) {
+    final hour = time.hour.toString().padLeft(2, '0');
+    final minute = time.minute.toString().padLeft(2, '0');
+    final second = time.second.toString().padLeft(2, '0');
+    return '$hour:$minute:$second';
+  }
+
+  String _formatDate(DateTime time) {
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return '${months[time.month - 1]} ${time.day}, ${time.year}';
   }
 }
