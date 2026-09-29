@@ -21,6 +21,7 @@ class LocalVpnService : VpnService() {
     private var directProxy: Socks5DirectProxy? = null
     private var tunnelThread: Thread? = null
     private var hevConfigFile: File? = null
+    private var nativeTunFd: Int? = null
 
     companion object {
         const val ACTION_START = "com.example.content_filter_vpn.START"
@@ -105,14 +106,17 @@ class LocalVpnService : VpnService() {
 
             isRunning = true
 
-            val fd = vpnInterface?.fileDescriptor
+            val fd = vpnInterface?.detachFd()
                 ?: throw IllegalStateException("VPN file descriptor unavailable")
+
+            vpnInterface = null
+            nativeTunFd = fd
 
             tunnelThread = Thread {
                 try {
                     val started = TProxyService.TProxyStartService(
                         hevConfigFile?.absolutePath,
-                        fd.detachFd()
+                        fd
                     )
 
                     if (!started) {
@@ -170,6 +174,13 @@ class LocalVpnService : VpnService() {
             e.printStackTrace()
         }
         vpnInterface = null
+
+        nativeTunFd?.let { fd ->
+            runCatching {
+                ParcelFileDescriptor.adoptFd(fd).use { }
+            }
+            nativeTunFd = null
+        }
 
         hevConfigFile?.delete()
         hevConfigFile = null
