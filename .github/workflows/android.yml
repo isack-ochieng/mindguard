@@ -43,9 +43,14 @@ jobs:
       - name: Test
         run: flutter test
 
+      - name: Setup Gradle 8.13
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.13'
+
       - name: Run Android unit tests
         working-directory: android
-        run: ./gradlew test
+        run: gradle test
       - name: Build release APK
         run: flutter build apk --release
 
