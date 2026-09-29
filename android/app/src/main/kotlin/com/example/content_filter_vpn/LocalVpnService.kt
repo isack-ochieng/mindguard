@@ -5,6 +5,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
 import android.net.VpnService
 import android.os.Build
 import android.os.IBinder
@@ -22,6 +24,7 @@ class LocalVpnService : VpnService() {
     private var tunnelThread: Thread? = null
     private var hevConfigFile: File? = null
     private var nativeTunFd: Int? = null
+    private var underlyingNetwork: Network? = null
 
     companion object {
         const val ACTION_START = "com.example.content_filter_vpn.START"
@@ -38,7 +41,7 @@ class LocalVpnService : VpnService() {
 
     override fun onCreate() {
         super.onCreate()
-        dnsResolver = DnsResolver(this, emptySet())
+        dnsResolver = DnsResolver(this, underlyingNetwork = null, blockedDomains = emptySet())
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -62,6 +65,9 @@ class LocalVpnService : VpnService() {
         startForeground(NOTIFICATION_ID, createNotification())
 
         try {
+            underlyingNetwork = getSystemService(ConnectivityManager::class.java)?.activeNetwork
+            dnsResolver.updateUnderlyingNetwork(underlyingNetwork)
+
             val builder = Builder()
                 .addAddress(VPN_ADDRESS_V4, 24)
                 .addAddress(VPN_ADDRESS_V6, 120)
@@ -85,6 +91,7 @@ class LocalVpnService : VpnService() {
             directProxy = Socks5DirectProxy(
                 vpnService = this,
                 dnsResolver = dnsResolver,
+                underlyingNetwork = underlyingNetwork,
                 onBlocked = ::sendBlockedSite
             )
 
