@@ -14,7 +14,6 @@ class ClockScreen extends StatefulWidget {
 }
 
 class _ClockScreenState extends State<ClockScreen> {
-  static const _passwordKey = 'mindguard_clock_password';
   static const _setupCompleteKey = 'mindguard_clock_setup_complete';
   static const _securePasswordKey = 'mindguard_clock_password';
   static const _secureStorage = FlutterSecureStorage();
