@@ -7,17 +7,24 @@ import java.util.concurrent.ConcurrentHashMap
 /**
  * DNS/domain helper backed by MindGuard's local decision engine.
  *
- * It intentionally does not perform remote classification. Unknown domains are
- * returned as unknown so a later intelligence layer can handle them.
+ * Unknown domains remain unknown here. Intelligence can be layered on later
+ * without putting a network call in the packet hot path.
  */
 class DnsResolver(
     context: Context,
     blockedDomains: Set<String> = emptySet()
 ) {
+    companion object {
+        private const val LEARNED_IP_TTL_MS = 10L * 60L * 1000L
+    }
+
     private val dnsCache = ConcurrentHashMap<String, String>()
-    private val blockedIpCache = ConcurrentHashMap<String, Boolean>()
+    private val blockedIpCache = ConcurrentHashMap<String, Long>()
     private val decisionEngine = LocalDecisionEngine(
-        cachePreferences = context.getSharedPreferences("mindguard_local_intelligence", Context.MODE_PRIVATE)
+        cachePreferences = context.getSharedPreferences(
+            "mindguard_local_intelligence",
+            Context.MODE_PRIVATE
+        )
     )
 
     init {
@@ -36,6 +43,27 @@ class DnsResolver(
         return decisionEngine.decide(domain)
     }
 
+    /**
+     * Called when MindGuard observes a DNS question. For domains already known
+     * to be blocked, resolve their current addresses on the underlying network
+     * and keep a short-lived IP correlation so ECH/direct-IP connections can
+     * still be rejected.
+     */
+    fun observeDomain(domain: String) {
+        val decision = decisionEngine.decide(domain)
+        if (decision.action != DecisionAction.BLOCK) return
+
+        val normalized = decision.domain
+
+        runCatching {
+            InetAddress.getAllByName(normalized).forEach { address ->
+                address.hostAddress?.let { ip ->
+                    blockedIpCache[ip] = System.currentTimeMillis() + LEARNED_IP_TTL_MS
+                }
+            }
+        }
+    }
+
     fun cacheDecision(
         domain: String,
         action: DecisionAction,
@@ -46,7 +74,11 @@ class DnsResolver(
     }
 
     fun isIpBlocked(ip: String): Boolean {
-        return blockedIpCache[ip] ?: false
+        val expiry = blockedIpCache[ip] ?: return false
+        if (expiry > System.currentTimeMillis()) return true
+
+        blockedIpCache.remove(ip, expiry)
+        return false
     }
 
     fun resolveDomain(domain: String): String? {
