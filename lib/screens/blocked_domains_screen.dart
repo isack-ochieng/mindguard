@@ -49,7 +49,7 @@ class _BlockedDomainsScreenState extends State<BlockedDomainsScreen> {
                 if (!mounted || !dialogContext.mounted) return;
 
                 Navigator.pop(dialogContext);
-                ScaffoldMessenger.of(this.context).showSnackBar(
+                ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Added $domain to blocked list')),
                 );
                 _domainController.clear();
@@ -65,7 +65,7 @@ class _BlockedDomainsScreenState extends State<BlockedDomainsScreen> {
   void _showResetDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Reset to Defaults'),
         content: const Text(
           'This will reset the blocked domains list to the default list of porn and gambling sites. Are you sure?',
