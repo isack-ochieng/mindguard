@@ -43,6 +43,9 @@ jobs:
       - name: Test
         run: flutter test
 
+      - name: Run Android unit tests
+        working-directory: android
+        run: ./gradlew test
       - name: Build release APK
         run: flutter build apk --release
 
