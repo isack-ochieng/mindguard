@@ -141,7 +141,7 @@ Candidate domains:
           .timeout(const Duration(seconds: 12));
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception('Gemini HTTP $response.statusCode');
+        throw Exception('Gemini HTTP ${response.statusCode}');
       }
 
       final decoded = jsonDecode(response.body) as Map<String, dynamic>;
