@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../providers/vpn_provider.dart';
+import '../services/ai_trust_service.dart';
 import 'blocked_domains_screen.dart';
 import 'blocked_sites_screen.dart';
 
@@ -11,7 +15,7 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Content Filter VPN'),
+        title: const Text('MindGuard'),
         elevation: 2,
       ),
       body: Consumer<VpnProvider>(
@@ -21,7 +25,6 @@ class HomeScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // VPN Status Card
                 Card(
                   elevation: 4,
                   child: Padding(
@@ -40,15 +43,15 @@ class HomeScreen extends StatelessWidget {
                         const SizedBox(height: 16),
                         Text(
                           vpnProvider.isConnected
-                              ? 'VPN Connected'
-                              : 'VPN Disconnected',
+                              ? 'Protection Active'
+                              : 'Protection Off',
                           style: Theme.of(context).textTheme.headlineSmall,
                         ),
                         const SizedBox(height: 8),
                         Text(
                           vpnProvider.isConnected
-                              ? 'Content filtering is active'
-                              : 'Tap to enable content filtering',
+                              ? 'MindGuard is checking DNS requests against the local protection list.'
+                              : 'Enable the VPN to start the lightweight domain filter.',
                           style: Theme.of(context).textTheme.bodyMedium,
                           textAlign: TextAlign.center,
                         ),
@@ -60,11 +63,14 @@ class HomeScreen extends StatelessWidget {
                             onPressed: vpnProvider.isLoading
                                 ? null
                                 : () async {
-                                    final success = await vpnProvider.toggleVpn();
+                                    final success =
+                                        await vpnProvider.toggleVpn();
                                     if (!success && context.mounted) {
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         const SnackBar(
-                                          content: Text('Failed to toggle VPN'),
+                                          content: Text(
+                                            'Failed to start the VPN filter',
+                                          ),
                                         ),
                                       );
                                     }
@@ -81,8 +87,8 @@ class HomeScreen extends StatelessWidget {
                                   )
                                 : Text(
                                     vpnProvider.isConnected
-                                        ? 'Disconnect'
-                                        : 'Connect',
+                                        ? 'Stop Protection'
+                                        : 'Start Protection',
                                     style: const TextStyle(fontSize: 18),
                                   ),
                           ),
@@ -91,26 +97,28 @@ class HomeScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-                
+
                 const SizedBox(height: 16),
-                
-                // Auto-Toggle Card
+
+                const _AiTrustCard(),
+
+                const SizedBox(height: 16),
+
                 Card(
                   elevation: 2,
                   child: SwitchListTile(
                     title: const Text('Auto-Toggle VPN'),
-                    subtitle: const Text('Automatically start/stop VPN when Wi-Fi or Mobile Data connects/disconnects'),
+                    subtitle: const Text(
+                      'Start and stop protection with network changes',
+                    ),
                     value: vpnProvider.isAutoToggleEnabled,
-                    onChanged: (value) {
-                      vpnProvider.toggleAutoToggle(value);
-                    },
+                    onChanged: vpnProvider.toggleAutoToggle,
                     secondary: const Icon(Icons.network_check),
                   ),
                 ),
 
                 const SizedBox(height: 16),
 
-                // Admin Status Card
                 Card(
                   elevation: 2,
                   child: ListTile(
@@ -129,12 +137,16 @@ class HomeScreen extends StatelessWidget {
                           : 'Disabled - Tap to enable protection',
                     ),
                     trailing: vpnProvider.isAdminEnabled
-                        ? const Icon(Icons.check_circle, color: Colors.green)
+                        ? const Icon(
+                            Icons.check_circle,
+                            color: Colors.green,
+                          )
                         : const Icon(Icons.warning, color: Colors.orange),
                     onTap: vpnProvider.isAdminEnabled
                         ? null
                         : () async {
-                            final success = await vpnProvider.requestAdminPrivileges();
+                            final success =
+                                await vpnProvider.requestAdminPrivileges();
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
@@ -149,10 +161,9 @@ class HomeScreen extends StatelessWidget {
                           },
                   ),
                 ),
-                
+
                 const SizedBox(height: 16),
-                
-                // Statistics Card
+
                 Card(
                   elevation: 2,
                   child: Padding(
@@ -171,12 +182,14 @@ class HomeScreen extends StatelessWidget {
                             _StatItem(
                               icon: Icons.block,
                               label: 'Blocked Domains',
-                              value: vpnProvider.blockedDomains.length.toString(),
+                              value:
+                                  vpnProvider.blockedDomains.length.toString(),
                             ),
                             _StatItem(
                               icon: Icons.history,
                               label: 'Sites Blocked',
-                              value: vpnProvider.blockedSites.length.toString(),
+                              value:
+                                  vpnProvider.blockedSites.length.toString(),
                             ),
                           ],
                         ),
@@ -184,10 +197,9 @@ class HomeScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-                
+
                 const SizedBox(height: 16),
-                
-                // Management Buttons
+
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
@@ -195,7 +207,8 @@ class HomeScreen extends StatelessWidget {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const BlockedDomainsScreen(),
+                          builder: (context) =>
+                              const BlockedDomainsScreen(),
                         ),
                       );
                     },
@@ -203,9 +216,9 @@ class HomeScreen extends StatelessWidget {
                     label: const Text('Manage Blocked Domains'),
                   ),
                 ),
-                
+
                 const SizedBox(height: 8),
-                
+
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
@@ -230,6 +243,158 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
+class _AiTrustCard extends StatefulWidget {
+  const _AiTrustCard();
+
+  @override
+  State<_AiTrustCard> createState() => _AiTrustCardState();
+}
+
+class _AiTrustCardState extends State<_AiTrustCard> {
+  static const _refreshInterval = Duration(hours: 6);
+
+  final AiTrustService _aiService = AiTrustService();
+  Timer? _periodicTimer;
+
+  AiTrustUpdate? _update;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeAiList();
+    });
+
+    // The list is refreshed periodically while this screen is alive.
+    // The VPN itself never waits for this timer.
+    _periodicTimer = Timer.periodic(_refreshInterval, (_) {
+      _refreshAiList();
+    });
+  }
+
+  Future<void> _initializeAiList() async {
+    final cached = await _aiService.loadCached();
+    if (!mounted) return;
+
+    setState(() => _update = cached);
+    await _applyDomains(cached.domains);
+
+    // Refresh only when the cached snapshot is older than the interval.
+    final stale = cached.updatedAt == DateTime.fromMillisecondsSinceEpoch(0) ||
+        DateTime.now().difference(cached.updatedAt) >= _refreshInterval;
+
+    if (stale) {
+      await _refreshAiList();
+    }
+  }
+
+  Future<void> _refreshAiList() async {
+    if (_loading) return;
+
+    setState(() => _loading = true);
+    final update = await _aiService.refresh();
+    await _applyDomains(update.domains);
+
+    if (!mounted) return;
+    setState(() {
+      _update = update;
+      _loading = false;
+    });
+  }
+
+  Future<void> _applyDomains(List<String> domains) async {
+    final provider = context.read<VpnProvider>();
+
+    for (final domain in domains) {
+      if (!provider.blockedDomains.contains(domain)) {
+        await provider.addBlockedDomain(domain);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _periodicTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final update = _update;
+    final domains = update?.domains ?? const <String>[];
+
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.auto_awesome,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'AI Domain Intelligence',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                if (_loading)
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  IconButton(
+                    tooltip: 'Refresh AI list',
+                    onPressed: _refreshAiList,
+                    icon: const Icon(Icons.refresh),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              update?.message ??
+                  'Building a local list of domains marked not trusted.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            if (domains.isEmpty)
+              const Text('No domains have been suggested yet.')
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: domains.take(8).map((domain) {
+                  return Chip(
+                    avatar: const Icon(Icons.gpp_bad_outlined, size: 18),
+                    label: Text(domain),
+                  );
+                }).toList(),
+              ),
+            const SizedBox(height: 12),
+            Text(
+              update?.usedGemini == true
+                  ? 'Gemini updates this local list periodically. '
+                      'Browsing history and page contents are not sent.'
+                  : 'Local demo list is active. Add your Gemini key in '
+                      'lib/services/ai_trust_service.dart to enable AI updates.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _StatItem extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -245,7 +410,11 @@ class _StatItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Icon(icon, size: 32, color: Theme.of(context).colorScheme.primary),
+        Icon(
+          icon,
+          size: 32,
+          color: Theme.of(context).colorScheme.primary,
+        ),
         const SizedBox(height: 8),
         Text(
           value,
