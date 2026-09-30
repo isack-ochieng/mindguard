@@ -111,7 +111,8 @@ class TrafficInspectorTest {
 
         val sniList = byteArrayOf(
             0x00, (host.size + 3).toByte(),
-            0x00, host.size.toByte(),
+            0x00, // name_type = host_name
+            (host.size ushr 8).toByte(), (host.size and 0xFF).toByte(),
             *host
         )
 
