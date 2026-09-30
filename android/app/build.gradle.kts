@@ -20,7 +20,8 @@ android {
 
     defaultConfig {
         applicationId = "com.example.content_filter_vpn"
-        minSdk = 24
+        // hevtunnel 1.7.5 requires Android API 26+.
+        minSdk = 26
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
