@@ -560,19 +560,14 @@ class Socks5DirectProxy(
         val output = java.io.ByteArrayOutputStream()
         val buffer = ByteArray(8 * 1024)
 
-        input.soTimeout = INITIAL_READ_TIMEOUT_MS
-
+        // The timeout belongs to the owning Socket, not InputStream.
+        // handleConnect() sets client.soTimeout before entering this method.
+        // Keep the inspection bounded by the deadline without trying to
+        // access a non-existent InputStream.soTimeout property.
         while (
             output.size() < MAX_INITIAL_PAYLOAD_BYTES &&
             System.currentTimeMillis() < inspectUntil
         ) {
-            val remainingTime =
-                (inspectUntil - System.currentTimeMillis()).coerceAtLeast(1L)
-
-            input.soTimeout = minOf(
-                INITIAL_READ_TIMEOUT_MS,
-                remainingTime.toInt().coerceAtLeast(1)
-            )
 
             val read = try {
                 input.read(buffer)
