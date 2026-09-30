@@ -110,7 +110,7 @@ content-safety demo (for example gambling or adult-content domains).
 Do not invent domains. Do not include explanations.
 
 Candidate domains:
-\${candidateDomains.join(', ')}
+${candidateDomains.join(', ')}
 ''';
 
     try {
