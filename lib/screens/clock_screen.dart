@@ -225,15 +225,15 @@ class _ClockScreenState extends State<ClockScreen> {
                           _confirmHands();
                         }
                       },
-                      onPanUpdate: (details) {
+                      // Use the long-press movement recognizer so hand dragging
+                      // continues after the central long-press without competing
+                      // with a separate pan recognizer.
+                      onLongPressMoveUpdate: (details) {
                         if (!_editing) return;
-                        final box = clockContext.findRenderObject() as RenderBox?;
-                        if (box != null) {
-                          _updateHand(
-                            box.globalToLocal(details.globalPosition),
-                            Size(diameter, diameter),
-                          );
-                        }
+                        _updateHand(
+                          details.localPosition,
+                          Size(diameter, diameter),
+                        );
                       },
                       child: SizedBox(
                         width: diameter,
