@@ -238,11 +238,7 @@ class _ClockScreenState extends State<ClockScreen> {
   }
 
   String _timeText(DateTime value) {
-    return value.hour.toString().padLeft(2, '0') +
-        ':' +
-        value.minute.toString().padLeft(2, '0') +
-        ':' +
-        value.second.toString().padLeft(2, '0');
+    return '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}:${value.second.toString().padLeft(2, '0')}';
   }
 
   String _dateText(DateTime value) {
@@ -261,11 +257,7 @@ class _ClockScreenState extends State<ClockScreen> {
       'December',
     ];
 
-    return months[value.month - 1] +
-        ' ' +
-        value.day.toString() +
-        ', ' +
-        value.year.toString();
+    return '${months[value.month - 1]} ${value.day}, ${value.year}';
   }
 
   Widget _guide() {
