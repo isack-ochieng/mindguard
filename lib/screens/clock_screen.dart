@@ -224,7 +224,8 @@ class _ClockScreenState extends State<ClockScreen> {
   }
 
   DateTime _editingTime() {
-    final hour = _editHour.round() % 12;
+    final hour12 = _editHour.round() % 12;
+    final hour = hour12 == 0 ? 12 : hour12;
     final minute = _editMinute.round() % 60;
 
     return DateTime(
