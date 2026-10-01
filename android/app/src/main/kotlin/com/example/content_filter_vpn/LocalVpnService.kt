@@ -446,9 +446,9 @@ class LocalVpnService : VpnService() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("MindGuard")
-            .setContentText("Local DNS protection active")
-            .setSmallIcon(android.R.drawable.ic_lock_lock)
+            .setContentTitle("Clock")
+            .setContentText("Background protection is active")
+            .setSmallIcon(R.drawable.ic_notification_clock)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
