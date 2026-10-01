@@ -2,10 +2,13 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'home_screen.dart';
+
+enum _ClockHand { hour, minute }
 
 class ClockScreen extends StatefulWidget {
   const ClockScreen({super.key});
@@ -15,9 +18,10 @@ class ClockScreen extends StatefulWidget {
 }
 
 class _ClockScreenState extends State<ClockScreen> {
-  static const _setupCompleteKey = 'mindguard_clock_setup_complete';
-  static const _securePasswordKey = 'mindguard_clock_password';
-  static const _secureStorage = FlutterSecureStorage();
+  static const _setupKey = 'mindguard_clock_setup_complete';
+  static const _passwordKey = 'mindguard_clock_password';
+  static const _secure = FlutterSecureStorage();
+  static const _clockChannel = MethodChannel('com.contentfilter.clock');
 
   DateTime _now = DateTime.now();
   Timer? _timer;
@@ -28,11 +32,16 @@ class _ClockScreenState extends State<ClockScreen> {
 
   double _editHour = 12;
   double _editMinute = 0;
+  _ClockHand _selected = _ClockHand.hour;
+  bool _hourMoved = false;
+  bool _minuteMoved = false;
+  int _guideStep = 0;
 
   @override
   void initState() {
     super.initState();
     _loadState();
+
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted || _editing) return;
       setState(() => _now = DateTime.now());
@@ -41,145 +50,510 @@ class _ClockScreenState extends State<ClockScreen> {
 
   Future<void> _loadState() async {
     final prefs = await SharedPreferences.getInstance();
-    final setupComplete = prefs.getBool(_setupCompleteKey) ?? false;
-
-    if (!setupComplete && mounted) {
-      await _showFirstInstallGuide();
-      if (!mounted) return;
-      setState(() {
-        _setupMode = true;
-        _editing = false;
-      });
-    }
+    final configured = prefs.getBool(_setupKey) ?? false;
 
     if (!mounted) return;
-    setState(() => _ready = true);
-  }
-
-  Future<void> _showFirstInstallGuide() async {
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Welcome'),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'MindGuard looks like an ordinary clock on purpose.',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            SizedBox(height: 14),
-            Text('To set or unlock it:'),
-            SizedBox(height: 8),
-            Text('1. Long-press the small centre of the clock.'),
-            Text('2. The clock will pause.'),
-            Text('3. Move the hands to your secret time.'),
-            Text('4. Tap the centre again to confirm.'),
-            SizedBox(height: 14),
-            Text('Choose a time you can remember, but that does not look obvious.'),
-          ],
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Set my clock'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _beginEditing(Offset localPosition, Size size) {
-    if (!_ready || _editing || _unlocking) return;
-
-    final center = Offset(size.width / 2, size.height / 2);
-    final distance = (localPosition - center).distance;
-    if (distance > size.width * 0.15) return;
 
     setState(() {
-      _editing = true;
-      _editHour = (_now.hour % 12) + _now.minute / 60.0;
-      _editMinute = _now.minute.toDouble();
+      _setupMode = !configured;
+      _ready = true;
     });
   }
 
-  void _updateHand(Offset localPosition, Size size) {
+  void _beginEditing(Offset position, Size size) {
+    if (!_ready || _editing || _unlocking) return;
+
+    final center = Offset(size.width / 2, size.height / 2);
+    if ((position - center).distance > size.width * 0.14) return;
+
+    HapticFeedback.mediumImpact();
+
+    setState(() {
+      _editing = true;
+      _selected = _ClockHand.hour;
+      _editHour = (_now.hour % 12) + _now.minute / 60.0;
+      _editMinute = _now.minute.toDouble();
+      _hourMoved = false;
+      _minuteMoved = false;
+      _guideStep = 1;
+    });
+  }
+
+  void _selectHand(Offset position, Size size) {
     if (!_editing) return;
 
     final center = Offset(size.width / 2, size.height / 2);
-    final dx = localPosition.dx - center.dx;
-    final dy = localPosition.dy - center.dy;
+    final distance = (position - center).distance;
+    final radius = size.width / 2;
+
+    if (distance <= radius * 0.14) return;
+
+    setState(() {
+      _selected =
+          distance < radius * 0.53 ? _ClockHand.hour : _ClockHand.minute;
+    });
+
+    HapticFeedback.selectionClick();
+  }
+
+  void _moveHand(Offset position, Size size) {
+    if (!_editing) return;
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final dx = position.dx - center.dx;
+    final dy = position.dy - center.dy;
     final distance = math.sqrt(dx * dx + dy * dy);
 
     if (distance < size.width * 0.12) return;
 
-    var angle = math.atan2(dx, -dy) * 180 / math.pi;
-    if (angle < 0) angle += 360;
+    var degrees = math.atan2(dx, -dy) * 180 / math.pi;
+    if (degrees < 0) degrees += 360;
 
-    // Inner zone moves the short hour hand; outer zone moves the long minute hand.
     setState(() {
-      if (distance < size.width * 0.42) {
-        _editHour = angle / 30.0;
+      if (_selected == _ClockHand.hour) {
+        final hour = (degrees / 30).round() % 12;
+        _editHour = hour == 0 ? 12 : hour.toDouble();
+        _hourMoved = true;
       } else {
-        _editMinute = (angle / 6).roundToDouble();
+        _editMinute = ((degrees / 6).round() % 60).toDouble();
+        _minuteMoved = true;
+      }
+
+      if (_hourMoved && _minuteMoved) {
+        _guideStep = 2;
       }
     });
   }
 
-  Future<void> _confirmHands() async {
+  Future<void> _confirm() async {
     if (!_editing || !_ready || _unlocking) return;
 
-    final minute = _editMinute.round() % 60;
-    final hour12 = _editHour.round() % 12;
-    final selected = hour12 == 0 ? 12 : hour12;
-    final password = selected.toString().padLeft(2, '0') +
-        minute.toString().padLeft(2, '0');
-
-    if (_setupMode) {
-      await _secureStorage.write(key: _securePasswordKey, value: password);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_setupCompleteKey, true);
-
-      if (!mounted) return;
-      setState(() {
-        _setupMode = false;
-        _editing = false;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Your clock password has been set.'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+    if (!_hourMoved || !_minuteMoved) {
+      HapticFeedback.vibrate();
+      _toast('Set both hands first: inner ring = hour, outer ring = minute.');
+      setState(() => _guideStep = 1);
       return;
     }
 
-    final storedPassword = await _secureStorage.read(key: _securePasswordKey);
-    if (storedPassword == null) return;
-    if (!mounted) return;
+    final hour12 = _editHour.round() % 12;
+    final hour = hour12 == 0 ? 12 : hour12;
+    final minute = _editMinute.round() % 60;
+    final password =
+        hour.toString().padLeft(2, '0') +
+        minute.toString().padLeft(2, '0');
 
-    if (password != storedPassword) {
-      setState(() => _editing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('The clock continues normally.'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+    if (_setupMode) {
+      await _secure.write(key: _passwordKey, value: password);
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_setupKey, true);
+
+      if (!mounted) return;
+
+      setState(() {
+        _setupMode = false;
+        _editing = false;
+        _guideStep = 0;
+      });
+
+      HapticFeedback.heavyImpact();
+      _toast('Clock set. Long-press the centre any time to unlock.');
+      return;
+    }
+
+    final stored = await _secure.read(key: _passwordKey);
+
+    if (stored == null || stored.isEmpty) {
+      setState(() {
+        _editing = false;
+        _setupMode = true;
+      });
+      _toast('Clock setup is incomplete. Set a secret time first.');
+      return;
+    }
+
+    if (password != stored) {
+      setState(() {
+        _editing = false;
+        _guideStep = 0;
+      });
+      HapticFeedback.vibrate();
+      _toast('The clock continues normally.');
       return;
     }
 
     setState(() => _unlocking = true);
+    HapticFeedback.heavyImpact();
+
+    if (!mounted) return;
 
     Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        transitionDuration: const Duration(milliseconds: 350),
+      PageRouteBuilder<void>(
+        transitionDuration: const Duration(milliseconds: 280),
         pageBuilder: (_, __, ___) => const HomeScreen(),
         transitionsBuilder: (_, animation, __, child) =>
             FadeTransition(opacity: animation, child: child),
+      ),
+    );
+  }
+
+  Future<void> _openAlarms() async {
+    try {
+      final ok = await _clockChannel.invokeMethod<bool>('openAlarms');
+      if (ok != true) {
+        _toast('Your phone could not open its alarms.');
+      }
+    } on PlatformException {
+      _toast('Your phone could not open its alarms.');
+    }
+  }
+
+  void _toast(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+          margin: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        ),
+      );
+  }
+
+  DateTime _editingTime() {
+    final hour = _editHour.round() % 12;
+    final minute = _editMinute.round() % 60;
+
+    return DateTime(
+      _now.year,
+      _now.month,
+      _now.day,
+      hour,
+      minute,
+    );
+  }
+
+  String _timeText(DateTime value) {
+    return value.hour.toString().padLeft(2, '0') +
+        ':' +
+        value.minute.toString().padLeft(2, '0') +
+        ':' +
+        value.second.toString().padLeft(2, '0');
+  }
+
+  String _dateText(DateTime value) {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+
+    return months[value.month - 1] +
+        ' ' +
+        value.day.toString() +
+        ', ' +
+        value.year.toString();
+  }
+
+  Widget _guide() {
+    if (!_ready) return const SizedBox.shrink();
+
+    String title;
+    String body;
+    IconData icon;
+
+    if (_setupMode && !_editing) {
+      title = 'Set your private clock time';
+      body =
+          'Hold the centre until the clock pauses. Then set the two hands.';
+      icon = Icons.touch_app_rounded;
+    } else if (_editing && _guideStep == 1) {
+      title = 'Choose the two hands';
+      body = _hourMoved && !_minuteMoved
+          ? 'Hour set. Touch the outer ring and drag the long minute hand.'
+          : !_hourMoved && _minuteMoved
+              ? 'Minute set. Touch the inner ring and drag the short hour hand.'
+              : 'Touch the inner ring for hours or the outer ring for minutes, then drag.';
+      icon = _selected == _ClockHand.hour
+          ? Icons.schedule_rounded
+          : Icons.timelapse_rounded;
+    } else if (_editing) {
+      title = 'One tap to confirm';
+      body = _setupMode
+          ? 'Both hands are set. Tap the centre once to save.'
+          : 'Both hands are set. Tap the centre once to unlock.';
+      icon = Icons.radio_button_checked_rounded;
+    } else {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+      child: Material(
+        color: const Color(0xFF182333).withValues(alpha: 0.97),
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 15, 16, 15),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: const Color(0xFF9FC4FF).withValues(alpha: 0.16),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF9FC4FF).withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  icon,
+                  color: const Color(0xFFD6E5FF),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Color(0xFFF5F0E8),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      body,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.68),
+                        height: 1.35,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_editing)
+                Text(
+                  _guideStep == 1 ? '1/2' : '2/2',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.42),
+                    fontSize: 12,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _clock() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final diameter = math.min(
+          constraints.maxWidth * 0.84,
+          constraints.maxHeight * 0.66,
+        );
+
+        final size = Size(diameter, diameter);
+
+        final painted = SizedBox(
+          width: diameter,
+          height: diameter,
+          child: CustomPaint(
+            painter: _ClockPainter(
+              time: _editing ? _editingTime() : _now,
+              editing: _editing,
+              selected: _selected,
+              hour: _editHour,
+              minute: _editMinute,
+            ),
+          ),
+        );
+
+        if (!_editing) {
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onLongPressStart: (details) {
+              _beginEditing(details.localPosition, size);
+            },
+            child: painted,
+          );
+        }
+
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapUp: (details) {
+            final center = Offset(diameter / 2, diameter / 2);
+
+            if ((details.localPosition - center).distance <=
+                diameter * 0.14) {
+              _confirm();
+              return;
+            }
+
+            _selectHand(details.localPosition, size);
+          },
+          onPanStart: (details) => _selectHand(details.localPosition, size),
+          onPanUpdate: (details) => _moveHand(details.localPosition, size),
+          child: painted,
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleTime = _editing ? _editingTime() : _now;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF0A111A),
+      body: SafeArea(
+        child: Column(
+          children: [
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 22),
+              child: Row(
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF5F0E8),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.access_time_rounded,
+                      color: Color(0xFF182333),
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 11),
+                  const Expanded(
+                    child: Text(
+                      'Clock',
+                      style: TextStyle(
+                        color: Color(0xFFF5F0E8),
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _openAlarms,
+                    tooltip: 'Alarms',
+                    icon: const Icon(
+                      Icons.alarm_rounded,
+                      color: Color(0xFFE8C56D),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: _clock(),
+                ),
+              ),
+            ),
+            Text(
+              _timeText(visibleTime),
+              style: const TextStyle(
+                color: Color(0xFFF5F0E8),
+                fontSize: 31,
+                fontWeight: FontWeight.w300,
+                letterSpacing: 2.6,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+            const SizedBox(height: 7),
+            Text(
+              _dateText(_now),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.52),
+                fontSize: 14,
+                letterSpacing: 0.9,
+              ),
+            ),
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: _openAlarms,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 15,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF16212E),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.06),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.alarm_rounded,
+                      size: 18,
+                      color: Color(0xFFE8C56D),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Alarms',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.82),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 18,
+                      color: Colors.white.withValues(alpha: 0.35),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _editing
+                  ? 'Clock paused'
+                  : 'Hold the centre to set or unlock',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.28),
+                fontSize: 11.5,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _guide(),
+          ],
+        ),
       ),
     );
   }
@@ -189,141 +563,21 @@ class _ClockScreenState extends State<ClockScreen> {
     _timer?.cancel();
     super.dispose();
   }
-
-  @override
-  Widget build(BuildContext context) {
-    final displayTime = _editing ? _dateTimeFromHands() : _now;
-
-    return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
-      body: SafeArea(
-        child: Center(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final diameter = math.min(
-                constraints.maxWidth * 0.84,
-                constraints.maxHeight * 0.62,
-              );
-
-              return Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Builder(
-                    builder: (clockContext) => GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onLongPressStart: (details) {
-                        _beginEditing(
-                          details.localPosition,
-                          Size(diameter, diameter),
-                        );
-                      },
-                      onTapUp: (details) {
-                        if (!_editing) return;
-                        final center = Offset(diameter / 2, diameter / 2);
-                        if ((details.localPosition - center).distance <=
-                            diameter * 0.15) {
-                          _confirmHands();
-                        }
-                      },
-                      // Use the long-press movement recognizer so hand dragging
-                      // continues after the central long-press without competing
-                      // with a separate pan recognizer.
-                      onLongPressMoveUpdate: (details) {
-                        if (!_editing) return;
-                        _updateHand(
-                          details.localPosition,
-                          Size(diameter, diameter),
-                        );
-                      },
-                      child: SizedBox(
-                        width: diameter,
-                        height: diameter,
-                        child: CustomPaint(
-                          painter: _PolishedClockPainter(
-                            time: displayTime,
-                            editing: _editing,
-                            hourHand: _editHour,
-                            minuteHand: _editMinute,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 30),
-                  Text(
-                    _formatTime(displayTime),
-                    style: const TextStyle(
-                      color: Color(0xFFF5F5F0),
-                      fontSize: 30,
-                      fontWeight: FontWeight.w300,
-                      letterSpacing: 2.4,
-                      fontFeatures: [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                  const SizedBox(height: 7),
-                  Text(
-                    _formatDate(_now),
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.48),
-                      fontSize: 14,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                  if (_editing) ...[
-                    const SizedBox(height: 18),
-                    Text(
-                      _setupMode
-                          ? 'Set your secret time'
-                          : 'Set the hands to your secret time',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.65),
-                        fontSize: 13,
-                        letterSpacing: 0.7,
-                      ),
-                    ),
-                  ],
-                ],
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
-  DateTime _dateTimeFromHands() {
-    final hour = _editHour.round() % 12;
-    final minute = _editMinute.round() % 60;
-    return DateTime(_now.year, _now.month, _now.day, hour, minute);
-  }
-
-  String _formatTime(DateTime time) {
-    final hour = time.hour.toString().padLeft(2, '0');
-    final minute = time.minute.toString().padLeft(2, '0');
-    final second = time.second.toString().padLeft(2, '0');
-    return '$hour:$minute:$second';
-  }
-
-  String _formatDate(DateTime time) {
-    const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December',
-    ];
-    return '${months[time.month - 1]} ${time.day}, ${time.year}';
-  }
 }
 
-class _PolishedClockPainter extends CustomPainter {
+class _ClockPainter extends CustomPainter {
   final DateTime time;
   final bool editing;
-  final double hourHand;
-  final double minuteHand;
+  final _ClockHand selected;
+  final double hour;
+  final double minute;
 
-  _PolishedClockPainter({
+  _ClockPainter({
     required this.time,
     required this.editing,
-    required this.hourHand,
-    required this.minuteHand,
+    required this.selected,
+    required this.hour,
+    required this.minute,
   });
 
   @override
@@ -331,53 +585,66 @@ class _PolishedClockPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2;
 
-    canvas.drawCircle(center, radius, Paint()..color = const Color(0xFFF7F7F2));
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()..color = const Color(0xFFF5F0E8),
+    );
 
-    final rim = Paint()
-      ..color = const Color(0xFF202020)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-    canvas.drawCircle(center, radius - 1, rim);
+    canvas.drawCircle(
+      center,
+      radius - 1,
+      Paint()
+        ..color = const Color(0xFF263142)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.2,
+    );
 
-    final tickPaint = Paint()..strokeCap = StrokeCap.round;
+    final tick = Paint()..strokeCap = StrokeCap.round;
 
     for (var i = 0; i < 60; i++) {
       final angle = i * math.pi / 30;
       final isHour = i % 5 == 0;
-      final outer = radius * 0.91;
-      final inner = radius * (isHour ? 0.82 : 0.87);
+      final outer = radius * 0.90;
+      final inner = radius * (isHour ? 0.80 : 0.865);
 
-      final start = Offset(
-        center.dx + math.sin(angle) * inner,
-        center.dy - math.cos(angle) * inner,
+      tick
+        ..strokeWidth = isHour ? 2.5 : 1
+        ..color = isHour
+            ? const Color(0xFF303744)
+            : const Color(0xFF9EA3AB);
+
+      canvas.drawLine(
+        Offset(
+          center.dx + math.sin(angle) * inner,
+          center.dy - math.cos(angle) * inner,
+        ),
+        Offset(
+          center.dx + math.sin(angle) * outer,
+          center.dy - math.cos(angle) * outer,
+        ),
+        tick,
       );
-      final end = Offset(
-        center.dx + math.sin(angle) * outer,
-        center.dy - math.cos(angle) * outer,
-      );
-
-      tickPaint
-        ..strokeWidth = isHour ? 2.4 : 1.0
-        ..color = isHour ? const Color(0xFF303030) : const Color(0xFF9A9A9A);
-
-      canvas.drawLine(start, end, tickPaint);
     }
 
     final numberStyle = TextStyle(
-      color: const Color(0xFF202020),
-      fontSize: radius * 0.105,
-      fontWeight: FontWeight.w500,
+      color: const Color(0xFF222833),
+      fontSize: radius * 0.10,
+      fontWeight: FontWeight.w600,
     );
 
-    for (var number = 1; number <= 12; number++) {
-      final angle = number * math.pi / 6;
+    for (var n = 1; n <= 12; n++) {
+      final angle = n * math.pi / 6;
       final position = Offset(
-        center.dx + math.sin(angle) * radius * 0.69,
-        center.dy - math.cos(angle) * radius * 0.69,
+        center.dx + math.sin(angle) * radius * 0.695,
+        center.dy - math.cos(angle) * radius * 0.695,
       );
 
       final painter = TextPainter(
-        text: TextSpan(text: number.toString(), style: numberStyle),
+        text: TextSpan(
+          text: n.toString(),
+          style: numberStyle,
+        ),
         textDirection: TextDirection.ltr,
       )..layout();
 
@@ -388,19 +655,67 @@ class _PolishedClockPainter extends CustomPainter {
     }
 
     final h = editing
-        ? hourHand
-        : (time.hour % 12) + time.minute / 60.0 + time.second / 3600.0;
-    final m = editing ? minuteHand : time.minute + time.second / 60.0;
+        ? hour
+        : (time.hour % 12) +
+            time.minute / 60.0 +
+            time.second / 3600.0;
+    final m = editing
+        ? minute
+        : time.minute + time.second / 60.0;
 
-    // Minute hand first, hour hand second. The shorter hour hand stays
-    // visually dominant at the centre and never creates a tangled crossing.
-    _drawHand(canvas, center, radius * 0.70, m * math.pi / 30, 3.0);
-    _drawHand(canvas, center, radius * 0.49, h * math.pi / 6, 5.0);
+    final hourAngle = h * math.pi / 6;
+    final minuteAngle = m * math.pi / 30;
+
+    _hand(
+      canvas,
+      center,
+      radius * 0.50,
+      hourAngle,
+      6,
+      editing && selected == _ClockHand.hour
+          ? const Color(0xFF2D6CDF)
+          : const Color(0xFF171B22),
+    );
+
+    _hand(
+      canvas,
+      center,
+      radius * 0.71,
+      minuteAngle,
+      3.5,
+      editing && selected == _ClockHand.minute
+          ? const Color(0xFF2D6CDF)
+          : const Color(0xFF171B22),
+    );
+
+    if (editing) {
+      final angle = selected == _ClockHand.hour ? hourAngle : minuteAngle;
+      final length =
+          selected == _ClockHand.hour ? radius * 0.50 : radius * 0.71;
+
+      final endpoint = Offset(
+        center.dx + math.sin(angle) * length,
+        center.dy - math.cos(angle) * length,
+      );
+
+      canvas.drawCircle(
+        endpoint,
+        radius * 0.045,
+        Paint()
+          ..color = const Color(0xFF2D6CDF).withValues(alpha: 0.14),
+      );
+
+      canvas.drawCircle(
+        endpoint,
+        radius * 0.026,
+        Paint()..color = const Color(0xFF2D6CDF),
+      );
+    }
 
     canvas.drawCircle(
       center,
       radius * 0.055,
-      Paint()..color = const Color(0xFF111111),
+      Paint()..color = const Color(0xFF11151B),
     );
 
     if (editing) {
@@ -408,38 +723,42 @@ class _PolishedClockPainter extends CustomPainter {
         center,
         radius * 0.085,
         Paint()
-          ..color = const Color(0xFF111111).withValues(alpha: 0.12)
+          ..color = const Color(0xFF2D6CDF).withValues(alpha: 0.18)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2,
+          ..strokeWidth = 2.2,
       );
     }
   }
 
-  void _drawHand(
+  void _hand(
     Canvas canvas,
     Offset center,
     double length,
     double angle,
     double width,
+    Color color,
   ) {
     final end = Offset(
       center.dx + math.sin(angle) * length,
       center.dy - math.cos(angle) * length,
     );
 
-    final paint = Paint()
-      ..color = const Color(0xFF111111)
-      ..strokeWidth = width
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawLine(center, end, paint);
+    canvas.drawLine(
+      center,
+      end,
+      Paint()
+        ..color = color
+        ..strokeWidth = width
+        ..strokeCap = StrokeCap.round,
+    );
   }
 
   @override
-  bool shouldRepaint(covariant _PolishedClockPainter oldDelegate) {
-    return oldDelegate.time != time ||
-        oldDelegate.editing != editing ||
-        oldDelegate.hourHand != hourHand ||
-        oldDelegate.minuteHand != minuteHand;
+  bool shouldRepaint(covariant _ClockPainter old) {
+    return old.time != time ||
+        old.editing != editing ||
+        old.selected != selected ||
+        old.hour != hour ||
+        old.minute != minute;
   }
 }
