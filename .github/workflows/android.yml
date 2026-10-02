@@ -89,6 +89,11 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Set up Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '9.3.1'
+
       - name: Validate Android release signing secrets
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
