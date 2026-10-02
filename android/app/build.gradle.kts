@@ -1,17 +1,17 @@
 import java.io.FileInputStream
 import java.util.Properties
 
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
 val keystorePropertiesFile = rootProject.file("key.properties")
 val keystoreProperties = Properties()
 
 if (keystorePropertiesFile.exists()) {
     FileInputStream(keystorePropertiesFile).use { keystoreProperties.load(it) }
-}
-
-plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("dev.flutter.flutter-gradle-plugin")
 }
 
 android {
