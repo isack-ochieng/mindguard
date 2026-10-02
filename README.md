@@ -1,13 +1,13 @@
-# Content Filter VPN
+# MindGuard
 
-A Flutter mobile application that functions as a content filtering VPN to monitor phone traffic and restrict access to specific websites such as porn and gambling sites. The app includes persistent admin privileges to prevent easy deletion.
+A lightweight Flutter + Android VPN demo that blocks selected domains locally at DNS time. The current build intentionally avoids TLS inspection, tun2socks/HEV forwarding, and packet-payload analysis so the phone keeps a simple network path.
 
 ## Features
 
 ### Core Functionality
-- **VPN-based Traffic Monitoring**: Intercepts and analyzes network traffic at the device level
+- **Lightweight DNS Filtering**: Uses Android VpnService to inspect DNS requests for configured domains
 - **Content Filtering**: Blocks access to predefined categories of websites (porn, gambling)
-- **Real-time Blocking**: Instantly blocks connections to restricted domains
+- **Real-time Blocking**: Returns NXDOMAIN for domains on the local not-trusted list
 - **Blocked Sites History**: Tracks and displays recently blocked connection attempts
 
 ### Security & Persistence
@@ -46,7 +46,7 @@ Users can customize this list by adding or removing domains as needed.
 
 ### Android Native Layer
 - **VPN Service**: Custom VpnService implementation for traffic interception
-- **Packet Analysis**: Deep packet inspection to identify and block restricted content
+- **Local DNS Decision Engine**: Exact/suffix-aware domain matching with no network call in the decision path
 - **DNS Resolution**: Domain-based filtering with caching
 - **Device Admin Receiver**: Handles admin privilege requests and lifecycle
 
@@ -131,9 +131,10 @@ Users can customize this list by adding or removing domains as needed.
 4. **Battery Usage**: Running a VPN service continuously may impact battery life
 
 ### Security Considerations
-1. **Device Admin**: Once enabled, the app must be manually deactivated from Settings > Security > Device Administrators before uninstallation
-2. **Traffic Privacy**: All traffic is processed locally on the device; no data is sent to external servers
-3. **No Logging**: The app does not permanently log browsing history beyond the in-memory blocked sites list
+1. **Local policy decision**: Domain matching happens on-device.
+2. **No browsing telemetry**: MindGuard does not send page contents or browsing history to the AI service.
+3. **DNS resolution**: Allowed DNS queries are forwarded through the protected DNS socket so ordinary browsing can continue.
+4. **No TLS inspection**: The demo never decrypts HTTPS traffic.
 
 ## Disabling/Uninstalling
 
@@ -174,7 +175,6 @@ lib/
 android/app/src/main/kotlin/com/example/content_filter_vpn/
 ├── MainActivity.kt                    # Flutter-Android bridge
 ├── LocalVpnService.kt                # VPN service implementation
-├── PacketAnalyzer.kt                 # Traffic analysis
 ├── DnsResolver.kt                    # Domain resolution
 ├── AdminReceiver.kt                  # Device admin receiver
 └── BootReceiver.kt                   # Boot auto-start
@@ -206,7 +206,7 @@ android/app/src/main/kotlin/com/example/content_filter_vpn/
 ### Battery Drain
 - VPN services run continuously and will consume battery
 - Consider disconnecting when not needed
-- Optimize by reducing the frequency of packet inspection if modifying the code
+- Keep the VPN DNS-only for the demo; avoid reintroducing full-device tunneling unless the product requirements justify it
 
 ## Legal & Ethical Considerations
 
@@ -231,6 +231,6 @@ For issues, questions, or contributions, please refer to the project repository 
 ---
 
 **Version**: 1.0.0  
-**Last Updated**: December 2025  
+**Last Updated**: September 2026  
 **Platform**: Android (API 21+)  
 **Framework**: Flutter 3.10+

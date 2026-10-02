@@ -1,4 +1,4 @@
-package com.example.content_filter_vpn
+package com.mindguard.app
 
 import android.app.Activity
 import android.app.admin.DevicePolicyManager
@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.net.VpnService
 import android.os.Build
+import android.provider.AlarmClock
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -16,6 +17,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private val VPN_CHANNEL = "com.contentfilter.vpn/service"
     private val ADMIN_CHANNEL = "com.contentfilter.vpn/admin"
+    private val CLOCK_CHANNEL = "com.contentfilter.clock"
     private val VPN_REQUEST_CODE = 1001
     private val ADMIN_REQUEST_CODE = 1002
     
@@ -99,6 +101,17 @@ class MainActivity : FlutterActivity() {
         }
         
         // Register broadcast receiver
+        val clockMethodChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            CLOCK_CHANNEL
+        )
+        clockMethodChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "openAlarms" -> result.success(openSystemAlarms())
+                else -> result.notImplemented()
+            }
+        }
+
         val filter = IntentFilter().apply {
             addAction("com.example.content_filter_vpn.CONNECTION_STATE")
             addAction("com.example.content_filter_vpn.SITE_BLOCKED")
@@ -112,6 +125,19 @@ class MainActivity : FlutterActivity() {
     }
     
     // VPN Methods
+    private fun openSystemAlarms(): Boolean {
+        return try {
+            startActivity(
+                Intent(AlarmClock.ACTION_SHOW_ALARMS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            )
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     private fun checkVpnPermission(): Boolean {
         val intent = VpnService.prepare(this)
         return intent == null

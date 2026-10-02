@@ -1,317 +1,140 @@
-# Content Filter VPN - Project Summary
+# MindGuard - Project Summary
 
 ## Overview
 
-This is a complete Flutter mobile application that implements a VPN-based content filtering system for Android devices. The app monitors network traffic and blocks access to specific categories of websites (pornography and gambling sites) while providing persistent protection through device admin privileges.
+MindGuard is a Flutter + native Android demo for lightweight domain filtering.
 
-## Project Statistics
+The current architecture deliberately keeps the network path small:
 
-- **Total Dart Files**: 8
-- **Total Kotlin Files**: 6
-- **Lines of Code**: ~2,500+
-- **Target Platform**: Android (API 21+)
-- **Framework**: Flutter 3.10+
+1. Flutter presents the disguised clock UI and the protection dashboard.
+2. Android VpnService captures only DNS traffic addressed to MindGuard's private DNS endpoint.
+3. A local decision engine checks the requested domain against local allow/block policy.
+4. Blocked domains receive a local NXDOMAIN response.
+5. Allowed/unknown DNS queries are forwarded through a protected DNS socket so normal browsing continues.
+6. No TLS interception, tun2socks/HEV tunnel, SOCKS proxy, or packet-payload inspection is used.
+
+## Current Demo Behaviour
+
+The core demo is intentionally simple:
+
+- Start MindGuard protection.
+- Browse normally.
+- A request for `betika.com` is matched by the local policy and blocked.
+- A request for a domain that is not blocked continues normally.
+- Block events are surfaced to the Flutter UI.
+- The user can maintain the local blocked-domain list.
+
+The demo is not intended to be a complete HTTPS inspection product. Direct-IP connections, DNS-over-HTTPS/Private DNS implementations inside some apps, or previously cached DNS results may bypass this DNS-only layer.
 
 ## Architecture
 
-### Three-Layer Architecture
+### Flutter
 
-1. **Presentation Layer (Flutter UI)**
-   - Material Design 3 interface
-   - Provider-based state management
-   - Responsive and user-friendly screens
-
-2. **Business Logic Layer (Flutter Services)**
-   - VPN service management
-   - Domain filtering logic
-   - Admin privilege handling
-   - Persistent storage
-
-3. **Platform Layer (Android Native)**
-   - VPN service implementation
-   - Packet analysis and filtering
-   - Device admin receiver
-   - Boot receiver for auto-start
-
-## File Structure
-
-```
-content_filter_vpn/
-│
-├── lib/                                    # Flutter/Dart code
-│   ├── main.dart                          # App entry point
-│   ├── providers/
-│   │   └── vpn_provider.dart             # State management
-│   ├── screens/
-│   │   ├── home_screen.dart              # Main dashboard
-│   │   ├── blocked_domains_screen.dart   # Domain management UI
-│   │   └── blocked_sites_screen.dart     # Blocked sites history
-│   └── services/
-│       ├── vpn_service.dart              # VPN service interface
-│       ├── blocked_domains_service.dart  # Domain storage & management
-│       └── admin_service.dart            # Device admin interface
-│
-├── android/                                # Android native code
-│   └── app/src/main/
-│       ├── kotlin/com/example/content_filter_vpn/
-│       │   ├── MainActivity.kt            # Flutter-Android bridge
-│       │   ├── LocalVpnService.kt        # VPN service implementation
-│       │   ├── PacketAnalyzer.kt         # Network packet analysis
-│       │   ├── DnsResolver.kt            # DNS resolution & filtering
-│       │   ├── AdminReceiver.kt          # Device admin receiver
-│       │   └── BootReceiver.kt           # Auto-start on boot
-│       ├── res/xml/
-│       │   └── device_admin.xml          # Device admin policies
-│       └── AndroidManifest.xml            # App configuration
-│
-├── README.md                               # User documentation
-├── BUILD_GUIDE.md                         # Build & deployment guide
-└── PROJECT_SUMMARY.md                     # This file
-```
-
-## Key Components
-
-### 1. VPN Service (LocalVpnService.kt)
-- Implements Android VpnService
-- Intercepts all network traffic
-- Analyzes packets in real-time
-- Blocks connections to restricted domains
-- Runs as foreground service with notification
-
-### 2. Packet Analyzer (PacketAnalyzer.kt)
-- Parses IP packets (IPv4)
-- Extracts TCP/UDP information
-- Identifies DNS queries
-- Detects HTTP/HTTPS traffic
-- Determines if traffic should be blocked
-
-### 3. DNS Resolver (DnsResolver.kt)
-- Domain-based filtering
-- Caching for performance
-- Supports wildcard matching
-- Handles subdomain blocking
-
-### 4. Device Admin (AdminReceiver.kt)
-- Prevents unauthorized uninstallation
-- Provides persistence
-- Requires explicit user deactivation
-
-### 5. Flutter UI Components
-- **Home Screen**: VPN status, connection toggle, statistics
-- **Blocked Domains Screen**: Add/remove/reset blocked domains
-- **Blocked Sites Screen**: View history of blocked attempts
-
-### 6. State Management (VpnProvider)
-- Centralized app state
-- Real-time updates
-- Service coordination
-- Reactive UI updates
-
-## Features Implemented
-
-### Core Features
-✅ VPN-based traffic interception  
-✅ Domain-based content filtering  
-✅ Real-time packet analysis  
-✅ Blocked sites tracking  
-✅ Customizable domain lists  
-✅ Pre-configured blocked domains (50+ sites)  
-
-### Security Features
-✅ Device admin protection  
-✅ Auto-start on boot  
-✅ Foreground service persistence  
-✅ Local-only processing (no external servers)  
-✅ No permanent logging  
-
-### User Experience
-✅ Clean Material Design 3 UI  
-✅ Simple connection toggle  
-✅ Visual status indicators  
-✅ Domain management interface  
-✅ Blocked sites history  
-✅ Statistics dashboard  
-
-## Technical Highlights
-
-### Method Channels
-- Bidirectional communication between Flutter and Android
-- Two channels: VPN service and Admin service
-- Event streaming for real-time updates
-
-### Permissions Handling
-- VPN permission with user consent
-- Device admin with explicit activation
-- Foreground service for Android 8+
-- Boot receiver for auto-start
-
-### Performance Optimizations
-- DNS caching to reduce lookups
-- Efficient packet parsing
-- Non-blocking I/O operations
-- Memory-efficient history storage (max 100 entries)
-
-### Error Handling
-- Graceful permission denials
-- Service recovery on crashes
-- User-friendly error messages
-- Comprehensive exception handling
-
-## Default Blocked Domains
-
-The app includes 50+ pre-configured blocked domains:
-
-**Porn Sites** (18 domains):
-- Major adult content sites
-- Live cam platforms
-- Adult subscription services
-
-**Gambling Sites** (30 domains):
-- Sports betting platforms
-- Online casinos
-- Poker sites
-- Daily fantasy sports
-
-Users can customize this list through the app interface.
-
-## Limitations & Considerations
-
-### Technical Limitations
-1. **HTTPS Inspection**: Cannot inspect encrypted HTTPS traffic content (only blocks based on DNS/SNI)
-2. **IP-based Connections**: Apps using direct IP addresses may bypass DNS filtering
-3. **VPN Conflicts**: Cannot run with other VPN apps simultaneously
-4. **Battery Impact**: Continuous VPN operation affects battery life
-
-### Platform Limitations
-1. **Android Only**: Currently only supports Android (iOS has different VPN APIs)
-2. **API Level 21+**: Requires Android 5.0 or higher
-3. **No Root Required**: Works without root, but has limitations compared to root-based solutions
-
-### Legal & Ethical
-1. **Consent Required**: Should only be installed with device owner's knowledge
-2. **Privacy Considerations**: Monitors all network traffic (processed locally)
-3. **Intended Use**: Designed for parental control, self-control, or educational purposes
-
-## Testing Recommendations
-
-### Manual Testing
-- [ ] Install on physical Android device
-- [ ] Grant VPN permission
-- [ ] Enable device admin
-- [ ] Test connection toggle
-- [ ] Attempt to access blocked sites
-- [ ] Verify blocking works
-- [ ] Add custom blocked domain
-- [ ] Remove blocked domain
-- [ ] View blocked sites history
-- [ ] Reboot device and verify auto-start
-- [ ] Attempt to uninstall with admin enabled
-- [ ] Disable admin and uninstall
-
-### Device Testing Matrix
-- Android 5.0 (API 21) - Minimum supported
-- Android 8.0 (API 26) - Foreground service changes
-- Android 10 (API 29) - Scoped storage
-- Android 12+ (API 31+) - Latest features
-
-## Future Enhancement Possibilities
-
-### Potential Features
-- [ ] HTTPS inspection with user-installed CA certificate
-- [ ] Time-based filtering (schedule when VPN is active)
-- [ ] App-specific filtering (block only certain apps)
-- [ ] Password protection for app settings
-- [ ] Usage statistics and reports
-- [ ] Cloud sync for blocked domains
-- [ ] Whitelist functionality
-- [ ] Category-based filtering (social media, gaming, etc.)
-- [ ] Parental control dashboard
-- [ ] Remote management capabilities
-
-### Technical Improvements
-- [ ] iOS version using Network Extension
-- [ ] More sophisticated packet analysis
-- [ ] Machine learning for content detection
-- [ ] IPv6 support
-- [ ] Better battery optimization
-- [ ] Offline mode with cached rules
-
-## Dependencies
-
-### Flutter Packages
-- `provider: ^6.1.1` - State management
-- `shared_preferences: ^2.2.2` - Local storage
-- `http: ^1.2.0` - HTTP utilities
-- `device_info_plus: ^10.1.0` - Device information
-- `permission_handler: ^11.3.0` - Permission management
+- `lib/main.dart`
+- `lib/providers/vpn_provider.dart`
+- `lib/screens/clock_screen.dart`
+- `lib/screens/home_screen.dart`
+- `lib/screens/blocked_domains_screen.dart`
+- `lib/screens/blocked_sites_screen.dart`
+- `lib/services/vpn_service.dart`
+- `lib/services/blocked_domains_service.dart`
+- `lib/services/admin_service.dart`
+- `lib/services/network_service.dart`
+- `lib/services/ai_trust_service.dart`
 
 ### Android
-- Kotlin 1.9.0+
-- Android Gradle Plugin 8.11.1
-- compileSdkVersion 34
-- minSdkVersion 21
-- targetSdkVersion 34
 
-## Build Outputs
+- `MainActivity.kt` — Flutter/native method channels.
+- `LocalVpnService.kt` — DNS-only VpnService and local DNS response handling.
+- `DnsResolver.kt` — small facade over the local decision engine.
+- `LocalDecisionEngine.kt` — fast, local, exact/suffix-aware domain policy.
+- `PolicyLists.kt` — small built-in demo block/allow policy.
+- `AdminReceiver.kt` — optional device-admin protection.
+- `BootReceiver.kt` / `NetworkChangeReceiver.kt` — existing persistence/automation hooks.
 
-When built, the project produces:
+## AI Domain Intelligence
 
-### Debug Build
-- `app-debug.apk` (~40-50 MB)
-- Includes debugging symbols
-- Not optimized
+`lib/services/ai_trust_service.dart` contains the optional Gemini integration.
 
-### Release Build
-- `app-release.apk` (~20-30 MB)
-- Optimized and minified
-- Ready for distribution
+The UI presents an "AI Domain Intelligence" card that:
 
-### Split APKs
-- `app-armeabi-v7a-release.apk` (~15 MB)
-- `app-arm64-v8a-release.apk` (~18 MB)
-- `app-x86_64-release.apk` (~20 MB)
+- Displays the current local not-trusted domain snapshot.
+- Applies newly suggested domains to the local blocked list.
+- Refreshes the list at a six-hour interval while the dashboard is open.
+- Can be refreshed manually.
+- Does not send browsing history or page contents to Gemini.
+- Uses a local fallback list when no key is configured.
 
-## Security Considerations
+### Gemini API key location
 
-### Data Privacy
-- All traffic analysis happens locally on device
-- No data sent to external servers
-- No permanent logging of browsing history
-- Blocked sites list stored locally only
+Open:
 
-### App Security
-- Device admin prevents casual uninstallation
-- Requires explicit deactivation steps
-- Foreground service ensures persistence
-- Auto-restart on device boot
+`lib/services/ai_trust_service.dart`
 
-### Limitations
-- Not a replacement for comprehensive security solutions
-- Can be bypassed by tech-savvy users with root access
-- Requires user cooperation for initial setup
+Look for:
 
-## Support & Maintenance
+```dart
+static const _demoGeminiApiKey = 'PASTE_YOUR_GEMINI_API_KEY_HERE';
+```
 
-### Documentation Provided
-1. **README.md** - User guide and feature overview
-2. **BUILD_GUIDE.md** - Detailed build and deployment instructions
-3. **PROJECT_SUMMARY.md** - This technical overview
+A safer build-time option is:
 
-### Code Quality
-- Well-structured and modular
-- Commented for clarity
-- Follows Flutter and Kotlin best practices
-- Error handling throughout
+```bash
+flutter build apk --dart-define=GEMINI_API_KEY=YOUR_KEY
+```
 
-## Conclusion
+A production version should move the AI call behind a backend because any key embedded into a mobile APK can ultimately be extracted.
 
-This is a production-ready Flutter application that successfully implements VPN-based content filtering with persistent protection. The app combines Flutter's cross-platform UI capabilities with native Android VPN services to create an effective content filtering solution.
+## Clock Camouflage
 
-The codebase is well-organized, documented, and ready for deployment. It can be built and installed on Android devices immediately, or further customized based on specific requirements.
+The app launches into the clock screen.
 
----
+- First installation guides the user through setting a secret time.
+- The password is stored in Android secure storage.
+- Long-pressing the centre enters edit mode.
+- The hands are moved through the same long-press gesture.
+- Tapping the centre confirms the selected time.
+- Correct time unlocks the actual dashboard.
 
-**Project Status**: ✅ Complete and Ready for Deployment  
-**Version**: 1.0.0  
-**Last Updated**: December 2025  
-**Developed with**: Flutter 3.10+ and Kotlin
+The minute-hand drag now uses the long-press movement recognizer instead of a competing pan recognizer.
+
+## Network Privacy Model
+
+MindGuard does not inspect or decrypt HTTPS payloads.
+
+The VPN service processes only DNS requests directed to its private DNS endpoint. Allowed/unknown DNS queries are forwarded through a protected socket; the rest of the device traffic is not relayed through a MindGuard proxy.
+
+This means there is no application-side browsing-content telemetry in the demo.
+
+## Performance Goal
+
+This branch intentionally avoids:
+
+- HEV/tun2socks.
+- Local SOCKS5 proxying.
+- TLS/SNI/ECH inspection.
+- IP correlation caches.
+- Full-device packet forwarding.
+- Busy one-millisecond packet polling.
+
+The VPN loop uses blocking I/O and handles only the DNS packets required for the demo.
+
+## Testing
+
+CI currently runs Flutter analysis/tests and Android unit tests, then builds the release APK.
+
+Manual device test:
+
+1. Install the APK.
+2. Complete the clock password setup.
+3. Enter the dashboard.
+4. Start protection.
+5. Open a browser and try `betika.com`.
+6. Verify the request is blocked.
+7. Open an allowed domain such as `google.com`.
+8. Verify ordinary browsing still works.
+9. Stop protection and verify browsing returns to normal.
+
+## Scope
+
+This is a proof-of-concept architecture. More advanced inspection, category intelligence, app-specific controls, scheduling, background AI refresh, and backend-managed threat intelligence can be added later, but they are deliberately not in the hot path of this lightweight demo.

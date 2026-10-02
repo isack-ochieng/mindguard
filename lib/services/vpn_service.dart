@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 class VpnService {
@@ -31,42 +32,42 @@ class VpnService {
   
   Future<bool> startVpn() async {
     try {
-      final bool result = await platform.invokeMethod('startVpn');
+      final bool result = await platform.invokeMethod<bool>('startVpn') ?? false;
       _isConnected = result;
       _connectionStateController.add(_isConnected);
       return result;
     } on PlatformException catch (e) {
-      print("Failed to start VPN: '${e.message}'.");
+      debugPrint("Failed to start VPN: '${e.message}'.");
       return false;
     }
   }
   
   Future<bool> stopVpn() async {
     try {
-      final bool result = await platform.invokeMethod('stopVpn');
+      final bool result = await platform.invokeMethod<bool>('stopVpn') ?? false;
       _isConnected = !result;
       _connectionStateController.add(_isConnected);
       return result;
     } on PlatformException catch (e) {
-      print("Failed to stop VPN: '${e.message}'.");
+      debugPrint("Failed to stop VPN: '${e.message}'.");
       return false;
     }
   }
   
   Future<bool> checkVpnPermission() async {
     try {
-      return await platform.invokeMethod('checkVpnPermission');
+      return await platform.invokeMethod<bool>('checkVpnPermission') ?? false;
     } on PlatformException catch (e) {
-      print("Failed to check VPN permission: '${e.message}'.");
+      debugPrint("Failed to check VPN permission: '${e.message}'.");
       return false;
     }
   }
   
   Future<bool> requestVpnPermission() async {
     try {
-      return await platform.invokeMethod('requestVpnPermission');
+      return await platform.invokeMethod<bool>('requestVpnPermission') ?? false;
     } on PlatformException catch (e) {
-      print("Failed to request VPN permission: '${e.message}'.");
+      debugPrint("Failed to request VPN permission: '${e.message}'.");
       return false;
     }
   }
@@ -75,7 +76,7 @@ class VpnService {
     try {
       await platform.invokeMethod('updateBlockedDomains', {'domains': domains});
     } on PlatformException catch (e) {
-      print("Failed to update blocked domains: '${e.message}'.");
+      debugPrint("Failed to update blocked domains: '${e.message}'.");
     }
   }
   

@@ -1,4 +1,4 @@
-package com.example.content_filter_vpn
+package com.mindguard.app
 
 import android.app.admin.DeviceAdminReceiver
 import android.content.Context

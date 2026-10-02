@@ -21,7 +21,7 @@ class _BlockedDomainsScreenState extends State<BlockedDomainsScreen> {
   void _showAddDomainDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Add Blocked Domain'),
         content: TextField(
           controller: _domainController,
@@ -43,13 +43,15 @@ class _BlockedDomainsScreenState extends State<BlockedDomainsScreen> {
             onPressed: () async {
               final domain = _domainController.text.trim();
               if (domain.isNotEmpty) {
-                await context.read<VpnProvider>().addBlockedDomain(domain);
-                if (mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Added $domain to blocked list')),
-                  );
-                }
+                final vpnProvider = context.read<VpnProvider>();
+                await vpnProvider.addBlockedDomain(domain);
+
+                if (!mounted || !dialogContext.mounted) return;
+
+                Navigator.pop(dialogContext);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Added $domain to blocked list')),
+                );
                 _domainController.clear();
               }
             },
@@ -63,7 +65,7 @@ class _BlockedDomainsScreenState extends State<BlockedDomainsScreen> {
   void _showResetDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Reset to Defaults'),
         content: const Text(
           'This will reset the blocked domains list to the default list of porn and gambling sites. Are you sure?',
@@ -75,13 +77,15 @@ class _BlockedDomainsScreenState extends State<BlockedDomainsScreen> {
           ),
           TextButton(
             onPressed: () async {
-              await context.read<VpnProvider>().resetToDefaultDomains();
-              if (mounted) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Reset to default domains')),
-                );
-              }
+              final vpnProvider = context.read<VpnProvider>();
+              await vpnProvider.resetToDefaultDomains();
+
+              if (!mounted || !dialogContext.mounted) return;
+
+              Navigator.pop(dialogContext);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Reset to default domains')),
+              );
             },
             child: const Text('Reset'),
           ),
@@ -124,11 +128,11 @@ class _BlockedDomainsScreenState extends State<BlockedDomainsScreen> {
                   icon: const Icon(Icons.delete),
                   onPressed: () async {
                     await vpnProvider.removeBlockedDomain(domain);
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Removed $domain')),
-                      );
-                    }
+                    if (!context.mounted) return;
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Removed $domain')),
+                    );
                   },
                 ),
               );
