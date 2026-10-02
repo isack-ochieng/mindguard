@@ -1,3 +1,13 @@
+import java.io.FileInputStream
+import java.util.Properties
+
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties()
+
+if (keystorePropertiesFile.exists()) {
+    FileInputStream(keystorePropertiesFile).use { keystoreProperties.load(it) }
+}
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -5,7 +15,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.content_filter_vpn"
+    namespace = "com.mindguard.app"
     compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
@@ -19,21 +29,30 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.content_filter_vpn"
+        applicationId = "com.mindguard.app"
         minSdk = 26
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
-    dependencies {
-        testImplementation("junit:junit:4.13.2")
+    signingConfigs {
+        create("release") {
+            keyAlias = keystoreProperties.getProperty("keyAlias")
+            keyPassword = keystoreProperties.getProperty("keyPassword")
+            storePassword = keystoreProperties.getProperty("storePassword")
+            storeFile = keystoreProperties.getProperty("storeFile")?.let { file(it) }
+        }
     }
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
+    }
+
+    dependencies {
+        testImplementation("junit:junit:4.13.2")
     }
 }
 
