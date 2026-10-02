@@ -30,12 +30,6 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Show toolchain versions
-        run: |
-          flutter --version
-          java -version
-          gradle --version
-
       - name: Get Flutter dependencies
         run: flutter pub get
 
@@ -43,6 +37,12 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '9.3.1'
+
+      - name: Show toolchain versions
+        run: |
+          flutter --version
+          java -version
+          gradle --version
 
       - name: Analyze Dart and Flutter code
         run: flutter analyze
