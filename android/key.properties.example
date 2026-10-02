@@ -1,0 +1,7 @@
+# Copy this file to android/key.properties for local release builds.
+# Keep the real key.properties and keystore outside source control.
+
+storePassword=YOUR_STORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=upload
+storeFile=upload-keystore.jks
