@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b1220" />
+    <meta name="description" content="MindGuard is a lightweight Android content-filtering app built around local DNS filtering, simple controls, and privacy-conscious operation." />
+    <meta property="og:title" content="MindGuard — Lightweight digital protection" />
+    <meta property="og:description" content="On-device DNS filtering for authorized protection, self-control, productivity, and education." />
+    <meta property="og:type" content="website" />
+    <title>MindGuard — Lightweight digital protection</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="shell nav">
+        <a class="brand" href="/">
+          <span class="brand-mark" aria-hidden="true">
+            <span class="clock-hand hour"></span>
+            <span class="clock-hand minute"></span>
+            <span class="clock-dot"></span>
+          </span>
+          <span>MindGuard</span>
+        </a>
+        <nav class="nav-links" aria-label="Primary navigation">
+          <a href="#how-it-works">How it works</a>
+          <a href="#privacy-model">Privacy</a>
+          <a class="nav-cta" href="/privacy">Privacy Policy</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="shell hero-grid">
+          <div class="hero-copy">
+            <p class="eyebrow">ANDROID • DNS FILTERING • PRIVACY-CONSCIOUS</p>
+            <h1>Quiet protection for the things that matter.</h1>
+            <p class="hero-lead">
+              MindGuard is a lightweight Android content-filtering app that uses local DNS decisions
+              to block configured domains while letting ordinary browsing continue.
+            </p>
+            <div class="hero-actions">
+              <a class="button primary" href="#how-it-works">See how it works</a>
+              <a class="button secondary" href="/privacy">Read the privacy policy</a>
+            </div>
+            <p class="microcopy">No account required. No TLS interception. No browsing-history service.</p>
+          </div>
+
+          <div class="hero-visual" aria-label="MindGuard product illustration">
+            <div class="device-card">
+              <div class="device-top">
+                <span class="status-dot"></span>
+                <span>MindGuard protection</span>
+                <span class="status">ACTIVE</span>
+              </div>
+              <div class="clock-face">
+                <span class="tick tick-12"></span>
+                <span class="tick tick-3"></span>
+                <span class="tick tick-6"></span>
+                <span class="tick tick-9"></span>
+                <span class="clock-hand-big hour"></span>
+                <span class="clock-hand-big minute"></span>
+                <span class="clock-center"></span>
+              </div>
+              <div class="device-footer">
+                <div><span>Local policy</span><strong>ON-DEVICE</strong></div>
+                <div><span>HTTPS inspection</span><strong>OFF</strong></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="privacy-model">
+        <div class="shell">
+          <div class="section-heading">
+            <p class="eyebrow">BUILT FOR CONTROL, NOT SURVEILLANCE</p>
+            <h2>Protection that keeps the network path simple.</h2>
+            <p>
+              MindGuard is intentionally narrow in scope. It evaluates domain requests against
+              local policy instead of decrypting web traffic or routing your entire connection
+              through a remote proxy.
+            </p>
+          </div>
+
+          <div class="feature-grid">
+            <article class="feature-card">
+              <div class="icon">01</div>
+              <h3>Local domain decisions</h3>
+              <p>
+                Blocked-domain matching happens on the device. A request can be denied locally
+                without sending the destination to a MindGuard server.
+              </p>
+            </article>
+            <article class="feature-card">
+              <div class="icon">02</div>
+              <h3>Lightweight filtering</h3>
+              <p>
+                The current app focuses on DNS traffic. It does not use TLS interception,
+                tun2socks/HEV tunnelling, or a SOCKS proxy.
+              </p>
+            </article>
+            <article class="feature-card">
+              <div class="icon">03</div>
+              <h3>Simple control</h3>
+              <p>
+                Manage the local not-trusted domain list and view protection status from the
+                MindGuard interface.
+              </p>
+            </article>
+            <article class="feature-card">
+              <div class="icon">04</div>
+              <h3>Optional AI assistance</h3>
+              <p>
+                The optional domain-intelligence feature can classify a predefined candidate list.
+                It is designed not to send browsing history or page contents to Gemini.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section alt" id="how-it-works">
+        <div class="shell">
+          <div class="section-heading">
+            <p class="eyebrow">HOW IT WORKS</p>
+            <h2>A straightforward three-step flow.</h2>
+          </div>
+
+          <div class="steps">
+            <div class="step">
+              <span class="step-number">1</span>
+              <div>
+                <h3>Protection starts</h3>
+                <p>Android grants MindGuard a local VPN interface used for DNS-level filtering.</p>
+              </div>
+            </div>
+            <div class="step">
+              <span class="step-number">2</span>
+              <div>
+                <h3>The domain is checked</h3>
+                <p>The local decision engine compares DNS requests with your not-trusted policy.</p>
+              </div>
+            </div>
+            <div class="step">
+              <span class="step-number">3</span>
+              <div>
+                <h3>Only the decision is applied</h3>
+                <p>Blocked domains receive a local negative response; allowed or unknown requests can continue normally.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="notice">
+            <strong>Important limitation:</strong>
+            DNS filtering is not the same as full web inspection. Direct-IP connections, some
+            DNS-over-HTTPS or Private DNS implementations, cached results, and other network
+            behaviours can bypass a DNS-only policy.
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="shell split">
+          <div>
+            <p class="eyebrow">AUTHORIZED USE</p>
+            <h2>Made for responsible digital protection.</h2>
+            <p>
+              MindGuard is intended for authorized parental-control, self-control, productivity,
+              educational, and research use. Do not install or configure network controls on
+              another person's device without appropriate authorization.
+            </p>
+          </div>
+          <div class="callout">
+            <span class="callout-label">CURRENT FOCUS</span>
+            <strong>Keep the protection layer small, understandable, and local.</strong>
+            <a href="/privacy">View the full privacy policy →</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="shell footer-inner">
+        <div>
+          <div class="brand footer-brand">
+            <span class="brand-mark" aria-hidden="true">
+              <span class="clock-hand hour"></span>
+              <span class="clock-hand minute"></span>
+              <span class="clock-dot"></span>
+            </span>
+            <span>MindGuard</span>
+          </div>
+          <p>Lightweight Android content filtering, built with a privacy-conscious network model.</p>
+        </div>
+        <div class="footer-links">
+          <a href="/privacy">Privacy Policy</a>
+          <a href="https://github.com/isack-ochieng/mindguard" rel="noopener noreferrer">GitHub</a>
+        </div>
+      </div>
+      <div class="shell footer-bottom">
+        <span>© 2026 Isack Ochieng. MindGuard.</span>
+        <span>Last updated October 3, 2026</span>
+      </div>
+    </footer>
+  </body>
+</html>

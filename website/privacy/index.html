@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b1220" />
+    <meta name="description" content="MindGuard Privacy Policy — how the Android app accesses, processes, stores, and shares information." />
+    <meta property="og:title" content="MindGuard Privacy Policy" />
+    <meta property="og:description" content="Privacy practices for the MindGuard Android app." />
+    <meta property="og:type" content="website" />
+    <title>Privacy Policy — MindGuard</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="shell nav">
+        <a class="brand" href="/">
+          <span class="brand-mark" aria-hidden="true">
+            <span class="clock-hand hour"></span>
+            <span class="clock-hand minute"></span>
+            <span class="clock-dot"></span>
+          </span>
+          <span>MindGuard</span>
+        </a>
+        <a class="back-link" href="/">← Back to MindGuard</a>
+      </div>
+    </header>
+
+    <main class="policy-page">
+      <div class="shell policy-shell">
+        <div class="policy-intro">
+          <p class="eyebrow">PRIVACY POLICY</p>
+          <h1>MindGuard Privacy Policy</h1>
+          <p class="policy-meta">Effective date: October 3, 2026 · Last updated: October 3, 2026</p>
+          <p class="lead">
+            MindGuard is designed as a lightweight Android content-filtering application.
+            This policy explains what information the app processes, where that information is
+            kept, when information may be sent to third parties, and the choices available to you.
+          </p>
+        </div>
+
+        <div class="policy-grid">
+          <article class="policy-card">
+            <h2>1. Who operates MindGuard</h2>
+            <p>
+              MindGuard is developed and maintained by <strong>Isack Ochieng</strong>.
+              Privacy questions and requests can be submitted through the public
+              <a href="https://github.com/isack-ochieng/mindguard/issues" rel="noopener noreferrer">MindGuard GitHub repository issue tracker</a>.
+            </p>
+          </article>
+
+          <article class="policy-card">
+            <h2>2. Information MindGuard does not require</h2>
+            <p>
+              The current app does not require an account or registration and does not ask you
+              to provide a name, email address, telephone number, profile, or payment information
+              in order to use the core filtering features.
+            </p>
+          </article>
+
+          <article class="policy-card">
+            <h2>3. Network information processed on the device</h2>
+            <p>
+              When protection is active, Android routes relevant DNS traffic through MindGuard's
+              local VPN interface so the app can make a domain-level filtering decision.
+              The app compares requested domains with its local policy and can block a matching
+              domain locally.
+            </p>
+            <p>
+              MindGuard's current architecture does not decrypt HTTPS payloads, inspect page
+              contents, or operate a remote proxy for your general web traffic.
+            </p>
+          </article>
+
+          <article class="policy-card">
+            <h2>4. Information stored locally</h2>
+            <p>
+              MindGuard may store app settings on the device, including the configured
+              not-trusted domain list and related protection preferences. The current app can
+              also retain recent blocked-domain events for its local history interface.
+            </p>
+            <p>
+              Optional AI domain-intelligence results are cached locally so the app can continue
+              using the most recent available snapshot.
+            </p>
+          </article>
+
+          <article class="policy-card">
+            <h2>5. Optional Gemini integration</h2>
+            <p>
+              MindGuard includes an optional domain-intelligence feature that can use Google's
+              Gemini API when a valid API key is configured. The current implementation sends
+              a predefined candidate-domain list and a classification prompt to Gemini.
+            </p>
+            <p>
+              The current implementation is specifically designed not to send your browsing
+              history, visited-page contents, or the pages you read to Gemini. If you enable
+              Gemini, the information sent to Google is subject to Google's applicable
+              <a href="https://policies.google.com/privacy" rel="noopener noreferrer">Privacy Policy</a>
+              and API terms.
+            </p>
+          </article>
+
+          <article class="policy-card">
+            <h2>6. Permissions and device capabilities</h2>
+            <p>Depending on the features you use, Android may request access needed for:</p>
+            <ul>
+              <li>a local VPN interface for DNS filtering;</li>
+              <li>internet and network-state access for normal networking;</li>
+              <li>foreground service operation while protection is active;</li>
+              <li>notification delivery for foreground-service status where required by Android; and</li>
+              <li>optional device-administrator protection and restart behaviour.</li>
+            </ul>
+            <p>
+              These permissions support the functions described by the app. MindGuard is not
+              designed to collect contact lists, messages, photos, microphone recordings, or
+              location history.
+            </p>
+          </article>
+
+          <article class="policy-card">
+            <h2>7. Sharing and disclosure</h2>
+            <p>
+              MindGuard does not operate a backend that receives or stores your browsing history
+              for the core filtering feature. Information remains on the device unless you
+              explicitly enable a feature that communicates with a third-party service, such as
+              the optional Gemini integration described above.
+            </p>
+            <p>
+              We may disclose information when required by applicable law, legal process, or a
+              valid governmental request. No sale of personal information is part of the current
+              MindGuard product model.
+            </p>
+          </article>
+
+          <article class="policy-card">
+            <h2>8. Security</h2>
+            <p>
+              MindGuard is designed to keep the filtering decision local and minimize unnecessary
+              data transmission. Sensitive local values such as the configured clock secret are
+              intended to be kept using Android-secure storage mechanisms provided by the app's
+              current implementation.
+            </p>
+            <p>
+              No method of storage or transmission can be guaranteed to be perfectly secure.
+              Keep your device, operating system, and MindGuard installation up to date.
+            </p>
+          </article>
+
+          <article class="policy-card">
+            <h2>9. Retention and deletion</h2>
+            <p>
+              Local MindGuard settings and cached filtering data remain on the device until they
+              are changed or removed, the relevant history is cleared, app data is cleared,
+              or the application is uninstalled. Cached AI snapshots may be replaced when a
+              later refresh succeeds.
+            </p>
+            <p>
+              Because the core application does not require a MindGuard account or maintain a
+              central user database, there is no server-side MindGuard account to delete.
+            </p>
+          </article>
+
+          <article class="policy-card">
+            <h2>10. Children's privacy</h2>
+            <p>
+              MindGuard is a general-purpose device protection tool. It should be used by a
+              parent, guardian, organization, or device owner in accordance with applicable law
+              and with appropriate notice or authorization. MindGuard is not designed to collect
+              personal profiles about children.
+            </p>
+          </article>
+
+          <article class="policy-card">
+            <h2>11. Changes to this policy</h2>
+            <p>
+              This policy may be updated when MindGuard's features, integrations, or data
+              practices change. The effective date at the top of this page will be updated when
+              material changes are published.
+            </p>
+          </article>
+
+          <article class="policy-card">
+            <h2>12. Contact and questions</h2>
+            <p>
+              For privacy questions, corrections, or concerns about the handling of information,
+              use the
+              <a href="https://github.com/isack-ochieng/mindguard/issues" rel="noopener noreferrer">MindGuard GitHub issue tracker</a>
+              and identify the request as a privacy matter.
+            </p>
+          </article>
+        </div>
+
+        <div class="policy-footer">
+          <a class="button secondary" href="/">← Return to MindGuard</a>
+          <p>
+            This policy is provided for the current MindGuard implementation and should be kept
+            synchronized with the app's actual permissions, integrations, and Play Console Data
+            safety declarations.
+          </p>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>
